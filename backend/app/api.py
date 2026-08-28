@@ -4,12 +4,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
 from .crypto import decrypt_field, encrypt_field
-from .models import AuditLog, KycDocument, LedgerEntry, Role, TradingAccount, User, Wallet
+from .models import AuditLog, KycDocument, LedgerEntry, MoneyRequest, Role, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
 from .security import create_access_token, new_totp_secret, require_roles, verify_password, verify_totp
 from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, MoneyRequestResponse, TwoFactorSetupResponse, TwoFactorVerifyRequest, TradingAccountCreate
@@ -88,7 +88,6 @@ async def review_kyc(document_id: UUID, payload: KycReview, claims: dict[str, st
 @router.post("/treasury/requests", response_model=MoneyRequestResponse)
 async def create_money_request(payload: MoneyRequestCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
     """Create an idempotent deposit/withdrawal request for the current principal."""
-    from .models import MoneyRequest
     existing = await db.scalar(select(MoneyRequest).where(MoneyRequest.idempotency_key == payload.idempotency_key, MoneyRequest.tenant_id == UUID(claims["tenant_id"])))
     if existing:
         return existing
@@ -107,6 +106,23 @@ async def register_trading_account(payload: TradingAccountCreate, claims: dict[s
     await db.commit()
     await db.refresh(account)
     return {"id": account.id, "platform": account.platform, "external_login": account.external_login, "status": "PENDING_SYNC"}
+
+
+@router.get("/operations/summary")
+async def operations_summary(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+    """Return tenant-scoped operational counts for the executive dashboard."""
+    tenant_id = UUID(claims["tenant_id"])
+    traders = await db.scalar(select(func.count(User.id)).where(User.tenant_id == tenant_id, User.role == Role.TRADER))
+    pending_kyc = await db.scalar(select(func.count(KycDocument.id)).where(KycDocument.tenant_id == tenant_id, KycDocument.status == "PENDING"))
+    pending_money = await db.scalar(select(func.count(MoneyRequest.id)).where(MoneyRequest.tenant_id == tenant_id, MoneyRequest.status == "PENDING"))
+    return {"active_traders": traders or 0, "pending_kyc": pending_kyc or 0, "pending_treasury": pending_money or 0}
+
+
+@router.get("/kyc/queue")
+async def kyc_queue(claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+    """List only pending documents in the reviewer's tenant."""
+    documents = await db.scalars(select(KycDocument).where(KycDocument.tenant_id == UUID(claims["tenant_id"]), KycDocument.status == "PENDING").order_by(KycDocument.created_at))
+    return [{"id": item.id, "user_id": item.user_id, "document_type": item.document_type, "created_at": item.created_at} for item in documents]
 
 
 @router.get("/wallet", response_model=WalletResponse)
