@@ -64,6 +64,11 @@ class PaymentGatewayType(StrEnum):
     LOCAL = "LOCAL"
 
 
+class PositionSide(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
 class AccountPlatform(StrEnum):
     MT4 = "MT4"
     MT5 = "MT5"
@@ -238,6 +243,59 @@ class Transaction(Base):
     payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Position(Base):
+    __tablename__ = "positions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    trader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    account_id: Mapped[UUID] = mapped_column(ForeignKey("trading_accounts.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    volume: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    side: Mapped[PositionSide] = mapped_column()
+    open_price: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    current_price: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    sl: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    tp: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    floating_pnl: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    swap: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    commission: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    is_open: Mapped[bool] = mapped_column(default=True, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TradeHistory(Base):
+    __tablename__ = "trade_history"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    trader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    account_id: Mapped[UUID] = mapped_column(ForeignKey("trading_accounts.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    volume: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    side: Mapped[PositionSide] = mapped_column()
+    open_price: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    close_price: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    realized_pnl: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    close_reason: Mapped[str] = mapped_column(String(80))
+
+
+class RiskRule(Base):
+    __tablename__ = "risk_rules"
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_risk_rule_tenant"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    max_leverage: Mapped[int] = mapped_column(default=500)
+    margin_call_level: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("100"))
+    stop_out_level: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("50"))
+    max_lot_size: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("100"))
+    prohibited_symbols_json: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    max_drawdown_alert: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("20"))
 
 
 class IbPartner(Base):

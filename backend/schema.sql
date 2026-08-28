@@ -59,6 +59,28 @@ CREATE TABLE transactions (
   status VARCHAR(20) NOT NULL DEFAULT 'PENDING', gateway_id UUID REFERENCES payment_gateways(id) ON DELETE SET NULL,
   payment_proof_url TEXT, rejection_note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE positions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  trader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, account_id UUID NOT NULL REFERENCES trading_accounts(id) ON DELETE CASCADE,
+  symbol VARCHAR(32) NOT NULL, volume NUMERIC(20,8) NOT NULL CHECK (volume > 0), side VARCHAR(10) NOT NULL,
+  open_price NUMERIC(20,8) NOT NULL, current_price NUMERIC(20,8) NOT NULL, sl NUMERIC(20,8), tp NUMERIC(20,8),
+  floating_pnl NUMERIC(20,8) NOT NULL DEFAULT 0, swap NUMERIC(20,8) NOT NULL DEFAULT 0, commission NUMERIC(20,8) NOT NULL DEFAULT 0,
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now(), is_open BOOLEAN NOT NULL DEFAULT true, closed_at TIMESTAMPTZ
+);
+CREATE TABLE trade_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  trader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, account_id UUID NOT NULL REFERENCES trading_accounts(id) ON DELETE CASCADE,
+  symbol VARCHAR(32) NOT NULL, volume NUMERIC(20,8) NOT NULL, side VARCHAR(10) NOT NULL,
+  open_price NUMERIC(20,8) NOT NULL, close_price NUMERIC(20,8) NOT NULL, realized_pnl NUMERIC(20,8) NOT NULL,
+  closed_at TIMESTAMPTZ NOT NULL DEFAULT now(), close_reason VARCHAR(80) NOT NULL
+);
+CREATE TABLE risk_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  max_leverage INTEGER NOT NULL DEFAULT 500, margin_call_level NUMERIC(8,4) NOT NULL DEFAULT 100,
+  stop_out_level NUMERIC(8,4) NOT NULL DEFAULT 50, max_lot_size NUMERIC(20,8) NOT NULL DEFAULT 100,
+  prohibited_symbols_json JSONB NOT NULL DEFAULT '[]', max_drawdown_alert NUMERIC(8,4) NOT NULL DEFAULT 20,
+  UNIQUE(tenant_id)
+);
 CREATE TABLE tenant_settings (
   tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
   primary_color VARCHAR(20) NOT NULL DEFAULT '#45b69c', secondary_color VARCHAR(20) NOT NULL DEFAULT '#1d3430',
@@ -84,5 +106,7 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_documents_review_queue ON kyc_documents(tenant_id, status, created_at);
 CREATE INDEX idx_money_requests_queue ON money_requests(tenant_id, status, created_at);
 CREATE INDEX idx_transactions_queue ON transactions(tenant_id, status, created_at);
+CREATE INDEX idx_positions_queue ON positions(tenant_id, is_open, opened_at);
+CREATE INDEX idx_trade_history_timeline ON trade_history(tenant_id, closed_at DESC);
 CREATE INDEX idx_ib_parent ON ib_partners(tenant_id, parent_id);
 CREATE INDEX idx_audit_timeline ON audit_logs(tenant_id, created_at DESC);
