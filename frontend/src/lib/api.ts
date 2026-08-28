@@ -41,6 +41,9 @@ export const crmApi = {
   ibNetwork: () => request<NetworkNode[]>("/api/v1/trader/ib/network"),
   ibCommissions: () => request<LedgerPage>("/api/v1/trader/ib/commissions"),
   ibWithdraw: (body: { amount: string; destination: string }) => request<unknown>("/api/v1/trader/ib/withdraw", { method: "POST", body: JSON.stringify(body) }),
+  tradeHistory: () => request<HistoryPage>("/api/v1/trader/history"),
+  cryptoDeposit: (body: { amount: string }, idempotencyKey: string) => request<{ id: string; status: string; address: string; network: string; qr_code: string }>("/api/v1/trader/finance/deposit/crypto", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) }),
+  paymentWithdraw: (body: { amount: string; destination: string }, idempotencyKey: string) => request<unknown>("/api/v1/trader/finance/withdraw", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) }),
 };
 
 export interface Portfolio { balance: string; equity: string; used_margin: string; free_margin: string; floating_pnl: string; accounts: Array<{ id: string; platform: string; login: string; server: string; leverage: number; is_demo: boolean; is_locked: boolean; status: string }> }
@@ -50,3 +53,4 @@ export interface Profile { id: string; email: string; full_name: string | null; 
 export interface KycDocument { id: string; document_type: string; status: string; review_note?: string | null; created_at: string }
 export interface IbOverview { referral_code: string; referral_link: string; referred_traders: number; direct_active_volume: string; total_earned_commissions: string; wallet_balance: string }
 export interface NetworkNode { id: string; email: string; full_name: string | null; role: string; level: number; children: NetworkNode[] }
+export interface HistoryPage { items: Array<{ id: string; symbol: string; realized_pnl: string; closed_at: string }>; total: number; offset: number; limit: number }
