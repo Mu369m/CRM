@@ -6,12 +6,13 @@ from typing import Final
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .commissions import process_trade_rebate
 from .models import LedgerEntry, LedgerEntryType, Position, TradeHistory, Wallet
 
 TRADE_SETTLEMENT_REFERENCE_PREFIX: Final[str] = "trade:settlement:"
 
 
-async def settle_position(
+async def settle_position_closure(
     session: AsyncSession,
     position: Position,
     *,
@@ -19,8 +20,9 @@ async def settle_position(
     realized_pnl: Decimal,
     closed_at,
     close_reason: str,
+    asset_class: str = "FOREX",
 ) -> TradeHistory:
-    """Close one position and post its realized P&L atomically."""
+    """Close one position and post trader P&L plus IB rebates atomically."""
     wallet = await session.scalar(
         select(Wallet)
         .where(
@@ -62,4 +64,14 @@ async def settle_position(
         close_reason=close_reason,
     )
     session.add(history)
+    await process_trade_rebate(
+        session,
+        position.tenant_id,
+        position.trader_id,
+        position.volume,
+        asset_class=asset_class,
+        trade_reference=str(position.id),
+        instrument_revenue=max(realized_pnl, Decimal("0")),
+    )
     return history
+

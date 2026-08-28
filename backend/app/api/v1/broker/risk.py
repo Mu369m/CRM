@@ -14,7 +14,7 @@ from ....core.db_router import get_tenant_db
 from ....models import Position, PositionSide, RiskRule
 from ....security import require_roles
 from ....models import Role
-from ....trading_settlement import settle_position
+from ....trading_settlement import settle_position_closure
 
 router = APIRouter(prefix="/api/v1/broker/risk", tags=["Broker Risk"])
 BrokerClaims = Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.FINANCE))]
@@ -182,7 +182,7 @@ async def close_position(position_id: UUID, claims: BrokerClaims, db: AsyncSessi
         raise HTTPException(status_code=404, detail="Open position not found")
     now = datetime.now(UTC)
     realized_pnl = calculate_floating_pnl(position)
-    history = await settle_position(
+    history = await settle_position_closure(
         db,
         position,
         close_price=position.current_price,

@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import IBRebateRule, IbPartner, LedgerEntry, LedgerEntryType, User, Wallet
+from .models import IbPartner, LedgerEntry, LedgerEntryType, Position, RebateRule, RebateStrategy, User, Wallet
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,21 +56,55 @@ async def process_trade_rebate(
     lots_traded: Decimal,
     asset_class: str = "FOREX",
     trade_reference: str | None = None,
+    instrument_revenue: Decimal = Decimal("0"),
 ) -> list[CommissionResult]:
-    """Allocate configured tier rebates atomically and journal every wallet credit.
-
-    ``trade_reference`` should be the immutable provider trade/position identifier.
-    It makes retries idempotent because each parent-tier ledger reference is unique.
-    """
+    """Allocate active tenant rebate rules in the caller's transaction."""
     if lots_traded <= 0:
         raise ValueError("lots_traded must be positive")
-    rule = await db.scalar(select(IBRebateRule).where(IBRebateRule.tenant_id == tenant_id))
-    trader = await db.scalar(select(User).where(User.id == trader_id, User.tenant_id == tenant_id))
-    if not rule or not trader:
+    if instrument_revenue < 0:
+        raise ValueError("instrument_revenue cannot be negative")
+    if not trade_reference:
+        raise ValueError("trade_reference is required for idempotent rebates")
+
+    try:
+        position_id = UUID(trade_reference)
+    except ValueError:
+        position_id = None
+    if position_id:
+        await db.scalar(select(Position.id).where(Position.id == position_id).with_for_update())
+    already_settled = await db.scalar(
+        select(LedgerEntry.id)
+        .where(LedgerEntry.reference.like(f"commission:{trade_reference}:%"))
+        .limit(1)
+    )
+    if already_settled:
         return []
-    rates = rule.tier_rates.get(asset_class, rule.tier_rates) if isinstance(rule.tier_rates, dict) else {}
-    reference_root = trade_reference or str(uuid4())
+
+    trader = await db.scalar(
+        select(User)
+        .where(User.id == trader_id, User.tenant_id == tenant_id)
+        .with_for_update()
+    )
+    if not trader:
+        return []
+
     parent_id = trader.parent_ib_id
+    if not parent_id:
+        partner = await db.scalar(
+            select(IbPartner).where(
+                IbPartner.user_id == trader_id,
+                IbPartner.tenant_id == tenant_id,
+            )
+        )
+        if partner:
+            parent_partner = await db.scalar(
+                select(IbPartner).where(
+                    IbPartner.id == partner.parent_id,
+                    IbPartner.tenant_id == tenant_id,
+                )
+            ) if partner.parent_id else None
+            parent_id = parent_partner.user_id if parent_partner else None
+
     visited: set[UUID] = set()
     results: list[CommissionResult] = []
     tier = 1
@@ -81,20 +115,64 @@ async def process_trade_rebate(
         parent = await db.scalar(select(User).where(User.id == parent_id, User.tenant_id == tenant_id, User.role == "IB_PARTNER"))
         if not parent:
             break
-        raw_rate = rates.get(str(tier), 0) if isinstance(rates, dict) else 0
-        amount = (lots_traded * Decimal(str(raw_rate))).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+        rule = await db.scalar(
+            select(RebateRule)
+            .where(
+                RebateRule.tenant_id == tenant_id,
+                RebateRule.level == tier,
+                RebateRule.enabled.is_(True),
+                RebateRule.instrument_group == asset_class,
+            )
+        )
+        if not rule:
+            parent_id = parent.parent_ib_id
+            tier += 1
+            continue
+        if rule.strategy in {RebateStrategy.PER_LOT_FIXED, RebateStrategy.ASSET_BASED}:
+            amount = lots_traded * rule.fixed_per_lot
+        else:
+            amount = instrument_revenue * rule.spread_percentage / Decimal("100")
+        amount = amount.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
         if amount > 0:
-            wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == parent.id, Wallet.tenant_id == tenant_id, Wallet.currency == "USD").with_for_update())
+            wallet = await db.scalar(
+                select(Wallet)
+                .where(
+                    Wallet.owner_id == parent.id,
+                    Wallet.tenant_id == tenant_id,
+                    Wallet.currency == "USD",
+                )
+                .with_for_update()
+            )
+            if not wallet:
+                wallet = Wallet(tenant_id=tenant_id, owner_id=parent.id, currency="USD", balance=Decimal("0"))
+                db.add(wallet)
+                await db.flush()
             if wallet:
-                ledger_reference = f"rebate:{reference_root}:{parent.id}:{tier}"
+                ledger_reference = f"commission:{trade_reference}:{parent.id}:{tier}"
                 existing = await db.scalar(select(LedgerEntry).where(LedgerEntry.reference == ledger_reference))
                 if not existing:
                     wallet.balance += amount
                     db.add(LedgerEntry(wallet_id=wallet.id, entry_type=LedgerEntryType.COMMISSION, amount=amount, reference=ledger_reference, note=f"Tier {tier} {asset_class} trade rebate"))
                     results.append(CommissionResult(parent.id, tier, amount))
-        parent_id = parent.parent_ib_id
+        parent_partner = await db.scalar(
+            select(IbPartner).where(
+                IbPartner.user_id == parent.id,
+                IbPartner.tenant_id == tenant_id,
+            )
+        )
+        if parent.parent_ib_id:
+            parent_id = parent.parent_ib_id
+        elif parent_partner and parent_partner.parent_id:
+            next_partner = await db.scalar(
+                select(IbPartner).where(
+                    IbPartner.id == parent_partner.parent_id,
+                    IbPartner.tenant_id == tenant_id,
+                )
+            )
+            parent_id = next_partner.user_id if next_partner else None
+        else:
+            parent_id = None
         tier += 1
     if tier > 100:
         raise ValueError("IB hierarchy exceeds the 100-level safety limit")
-    await db.commit()
     return results

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..models import AuditLog, Position, RiskRule, Wallet
-from ..trading_settlement import settle_position
+from ..trading_settlement import settle_position_closure
 from .price_streamer import PriceTick, mark_to_market
 
 
@@ -84,7 +84,7 @@ class RiskExecutor:
             for position in positions:
                 now = datetime.now(UTC)
                 realized = mark_to_market(position, _position_tick(position))
-                await settle_position(
+                await settle_position_closure(
                     session,
                     position,
                     close_price=position.current_price,
