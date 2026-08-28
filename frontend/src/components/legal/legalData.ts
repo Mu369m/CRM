@@ -1,0 +1,17 @@
+export type LegalDocument = "terms" | "privacy" | "dpa" | "sla";
+
+export const legalDocuments: Record<LegalDocument, { label: string; eyebrow: string; title: string; intro: string }> = {
+  terms: { label: "Terms of Service", eyebrow: "Master agreement", title: "Terms of Service", intro: "The operating agreement for using Northstar Brokerage CRM and its connected trading infrastructure." },
+  privacy: { label: "Privacy Policy", eyebrow: "GDPR / data isolation", title: "Privacy Policy", intro: "How Northstar processes personal data while preserving strict tenant and BYODB boundaries." },
+  dpa: { label: "Data Processing Agreement", eyebrow: "Controller / processor", title: "Data Processing Agreement", intro: "Processing commitments for broker data, customer records, and delegated service providers." },
+  sla: { label: "Service Level Agreement", eyebrow: "Operational commitment", title: "Service Level Agreement", intro: "Availability, incident response, and service credit commitments for production plans." },
+};
+
+export const legalSections = [
+  { id: "scope", title: "Scope & definitions", body: "Northstar provides operational CRM, treasury, compliance, and trading connectivity tooling to authorized brokerage businesses. Each broker remains responsible for its customer relationships, regulatory obligations, and instructions submitted through the platform." },
+  { id: "sovereignty", title: "Data sovereignty & BYODB encryption", body: "Broker-owned data remains in the database selected by that broker. Connection credentials are encrypted in our AES-256-GCM vault, never returned through the API, and are used only to establish the tenant-isolated database session. Northstar personnel do not receive routine access to broker database contents." },
+  { id: "billing", title: "Subscription, limits & termination", body: "Plans are billed in advance according to the order form. Usage limits, connected account quotas, and included support levels are enforced per plan. Either party may terminate for material breach, non-payment, or a lawful compliance requirement; data export remains available during the stated transition period." },
+  { id: "security", title: "Security & incident response", body: "We apply least-privilege access, encrypted transport, audit logging, tenant-aware authorization, and controlled deployment practices. Confirmed security incidents are communicated to affected customers without undue delay and with the information reasonably available at the time." },
+  { id: "liability", title: "Liability limitation", body: "To the maximum extent permitted by law, Northstar is not liable for indirect, consequential, or lost-profit damages, trading losses caused by customer instructions, or outages in third-party venues. Aggregate direct liability is limited to fees paid for the affected service period, subject to the order form and applicable law." },
+  { id: "sla", title: "Availability commitment", body: "Production services target 99.9% monthly availability, excluding scheduled maintenance, emergency maintenance, force majeure, and outages caused by customer or third-party systems. Support follows the severity and response targets published for the subscribed plan." },
+];
