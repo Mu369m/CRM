@@ -16,7 +16,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     const token = window.localStorage.getItem("access_token");
     if (!token) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-    fetch(`${apiUrl}/api/settings`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${apiUrl}/api/settings`, { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Host": window.location.host } })
       .then((response) => (response.ok ? response.json() : null))
       .then((settings: TenantSettings | null) => {
         if (!settings) return;
