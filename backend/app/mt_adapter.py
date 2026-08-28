@@ -7,6 +7,7 @@ registered transport before any live operation is attempted.
 
 from dataclasses import dataclass
 from decimal import Decimal
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from pydantic import BaseModel, EmailStr, Field
@@ -24,6 +25,23 @@ class MTAccountCreateSchema(BaseModel):
     deposit: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=8)
 
 
+class MTTick(BaseModel):
+    """Normalized bid/ask tick emitted by an MT4/MT5 transport."""
+
+    symbol: str = Field(min_length=1, max_length=32)
+    bid: Decimal = Field(gt=0, max_digits=20, decimal_places=8)
+    ask: Decimal = Field(gt=0, max_digits=20, decimal_places=8)
+
+
+class MTTradeEvent(BaseModel):
+    """Normalized trade event forwarded to the position synchronizer."""
+
+    event_type: str = Field(min_length=1, max_length=40)
+    account_login: str = Field(min_length=1, max_length=80)
+    symbol: str = Field(min_length=1, max_length=32)
+    payload: dict[str, str | int | Decimal | bool] = Field(default_factory=dict)
+
+
 class ManagerOperations(Protocol):
     """Broker-owned implementation backed by an MT Manager SDK or gateway."""
 
@@ -38,6 +56,8 @@ class MTManagerAdapter:
     encrypted_credentials: str
     manager_ip: str
     operations: ManagerOperations | None = None
+    tick_handler: Callable[[MTTick], Awaitable[None]] | None = None
+    trade_event_handler: Callable[[MTTradeEvent], Awaitable[None]] | None = None
 
     def _credentials(self) -> dict[str, str]:
         """Decrypt a JSON credential bundle only at operation time."""
@@ -65,3 +85,15 @@ class MTManagerAdapter:
         if amount == 0:
             raise ValueError("Balance adjustment cannot be zero")
         return await self.operations.update_balance(self._credentials(), login, amount, comment)
+
+    async def on_tick(self, symbol: str, bid: Decimal, ask: Decimal) -> None:
+        """Forward a validated market tick to the registered position synchronizer."""
+        tick = MTTick(symbol=symbol.upper(), bid=bid, ask=ask)
+        if self.tick_handler:
+            await self.tick_handler(tick)
+
+    async def on_trade_event(self, event: MTTradeEvent | dict[str, object]) -> None:
+        """Forward a normalized account event from an external MT socket/SDK."""
+        normalized = event if isinstance(event, MTTradeEvent) else MTTradeEvent.model_validate(event)
+        if self.trade_event_handler:
+            await self.trade_event_handler(normalized)
