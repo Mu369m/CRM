@@ -10,10 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....db import get_db
-from ....models import Position, PositionSide, RiskRule, TradeHistory, Wallet
+from ....core.db_router import get_tenant_db
+from ....models import Position, PositionSide, RiskRule
 from ....security import require_roles
 from ....models import Role
+from ....trading_settlement import settle_position
 
 router = APIRouter(prefix="/api/v1/broker/risk", tags=["Broker Risk"])
 BrokerClaims = Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.FINANCE))]
@@ -117,7 +118,7 @@ def position_response(position: Position) -> PositionResponse:
 @router.get("/positions", response_model=PositionPage)
 async def list_positions(
     claims: BrokerClaims,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     symbol: str | None = Query(default=None, min_length=1, max_length=32),
     account_id: UUID | None = None,
     side: PositionSide | None = None,
@@ -137,7 +138,7 @@ async def list_positions(
 
 
 @router.get("/exposure", response_model=list[ExposureRow])
-async def exposure(claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> list[ExposureRow]:
+async def exposure(claims: BrokerClaims, db: AsyncSession = Depends(get_tenant_db)) -> list[ExposureRow]:
     positions = await db.scalars(select(Position).where(Position.tenant_id == UUID(claims["tenant_id"]), Position.is_open.is_(True)))
     grouped: dict[str, list[Decimal]] = {}
     for position in positions:
@@ -147,7 +148,7 @@ async def exposure(claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.get("/metrics", response_model=RiskMetrics)
-async def metrics(claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> RiskMetrics:
+async def metrics(claims: BrokerClaims, db: AsyncSession = Depends(get_tenant_db)) -> RiskMetrics:
     tenant_id = UUID(claims["tenant_id"])
     rule = await db.scalar(select(RiskRule).where(RiskRule.tenant_id == tenant_id))
     stop_out_level = rule.stop_out_level if rule else Decimal("50")
@@ -175,29 +176,32 @@ async def metrics(claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> R
 
 
 @router.post("/positions/{position_id}/close", response_model=TradeHistoryResponse)
-async def close_position(position_id: UUID, claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> TradeHistoryResponse:
+async def close_position(position_id: UUID, claims: BrokerClaims, db: AsyncSession = Depends(get_tenant_db)) -> TradeHistoryResponse:
     position = await db.scalar(select(Position).where(Position.id == position_id, Position.tenant_id == UUID(claims["tenant_id"]), Position.is_open.is_(True)).with_for_update())
     if not position:
         raise HTTPException(status_code=404, detail="Open position not found")
     now = datetime.now(UTC)
     realized_pnl = calculate_floating_pnl(position)
-    position.floating_pnl = realized_pnl
-    position.is_open = False
-    position.closed_at = now
-    history = TradeHistory(tenant_id=position.tenant_id, trader_id=position.trader_id, account_id=position.account_id, symbol=position.symbol, volume=position.volume, side=position.side, open_price=position.open_price, close_price=position.current_price, realized_pnl=realized_pnl, closed_at=now, close_reason="BROKER_FORCE_CLOSE")
-    db.add(history)
+    history = await settle_position(
+        db,
+        position,
+        close_price=position.current_price,
+        realized_pnl=realized_pnl,
+        closed_at=now,
+        close_reason="BROKER_FORCE_CLOSE",
+    )
     await db.commit()
     await db.refresh(history)
     return TradeHistoryResponse.model_validate(history)
 
 
 @router.get("/rules", response_model=RiskRuleResponse | None)
-async def get_rules(claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> RiskRule | None:
+async def get_rules(claims: BrokerClaims, db: AsyncSession = Depends(get_tenant_db)) -> RiskRule | None:
     return await db.scalar(select(RiskRule).where(RiskRule.tenant_id == UUID(claims["tenant_id"])))
 
 
 @router.post("/rules", response_model=RiskRuleResponse)
-async def update_rules(payload: RiskRulePayload, claims: BrokerClaims, db: AsyncSession = Depends(get_db)) -> RiskRule:
+async def update_rules(payload: RiskRulePayload, claims: BrokerClaims, db: AsyncSession = Depends(get_tenant_db)) -> RiskRule:
     rule = await db.scalar(select(RiskRule).where(RiskRule.tenant_id == UUID(claims["tenant_id"])).with_for_update())
     if not rule:
         rule = RiskRule(tenant_id=UUID(claims["tenant_id"]), **payload.model_dump())

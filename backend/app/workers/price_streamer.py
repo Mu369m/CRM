@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
+from uuid import UUID
 
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -36,9 +37,10 @@ def mark_to_market(position: Position, tick: PriceTick) -> Decimal:
 class PriceStreamer:
     """Owns a bounded tick queue and updates all matching open positions atomically."""
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession], redis: Redis, queue_size: int = 10_000) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession], redis: Redis, tenant_id: UUID, queue_size: int = 10_000) -> None:
         self._session_factory = session_factory
         self._redis = redis
+        self._tenant_id = tenant_id
         self._ticks: asyncio.Queue[PriceTick] = asyncio.Queue(maxsize=queue_size)
         self._stop = asyncio.Event()
         self._lock = asyncio.Lock()
@@ -76,9 +78,21 @@ class PriceStreamer:
             await self.submit_tick(tick)
 
     async def _apply_tick(self, tick: PriceTick) -> None:
+        lock = self._redis.lock(f"locks:prices:{self._tenant_id}", timeout=60, blocking_timeout=1)
+        if not await lock.acquire():
+            return
+        try:
+            await self._apply_tick_unlocked(tick)
+        finally:
+            try:
+                await lock.release()
+            except Exception:
+                pass
+
+    async def _apply_tick_unlocked(self, tick: PriceTick) -> None:
         async with self._lock:
             async with self._session_factory() as session:
-                positions = list(await session.scalars(select(Position).where(Position.symbol == tick.symbol, Position.is_open.is_(True))))
+                positions = list(await session.scalars(select(Position).where(Position.tenant_id == self._tenant_id, Position.symbol == tick.symbol, Position.is_open.is_(True))))
                 updates: list[dict[str, str]] = []
                 for position in positions:
                     position.current_price = tick.bid if position.side == PositionSide.BUY else tick.ask
@@ -86,7 +100,7 @@ class PriceStreamer:
                     updates.append({"position_id": str(position.id), "symbol": position.symbol, "floating_pnl": str(position.floating_pnl), "current_price": str(position.current_price)})
                 await session.commit()
         if updates:
-            await self._redis.publish("positions:pnl", json.dumps({"type": "position_pnl_updated", "updates": updates}))
+            await self._redis.publish(f"tenant:{self._tenant_id}:positions:pnl", json.dumps({"type": "position_pnl_updated", "tenant_id": str(self._tenant_id), "updates": updates}))
 
     async def stop(self) -> None:
         self._stop.set()

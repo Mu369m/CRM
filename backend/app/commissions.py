@@ -84,7 +84,7 @@ async def process_trade_rebate(
         raw_rate = rates.get(str(tier), 0) if isinstance(rates, dict) else 0
         amount = (lots_traded * Decimal(str(raw_rate))).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
         if amount > 0:
-            wallet = await db.scalar(select(Wallet).where(Wallet.user_id == parent.id, Wallet.tenant_id == tenant_id, Wallet.currency == "USD").with_for_update())
+            wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == parent.id, Wallet.tenant_id == tenant_id, Wallet.currency == "USD").with_for_update())
             if wallet:
                 ledger_reference = f"rebate:{reference_root}:{parent.id}:{tier}"
                 existing = await db.scalar(select(LedgerEntry).where(LedgerEntry.reference == ledger_reference))

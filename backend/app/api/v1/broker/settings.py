@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....db import get_db
+from ....core.db_router import get_tenant_db
 from ....models import Role, TenantSettings
 from ....security import require_roles
 
@@ -38,7 +38,7 @@ class KycSchemaPayload(BaseModel):
 @router.get("/kyc-schema", response_model=KycSchemaPayload)
 async def get_kyc_schema(
     claims: Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.COMPLIANCE))],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> KycSchemaPayload:
     settings = await db.get(TenantSettings, UUID(claims["tenant_id"]))
     return KycSchemaPayload.model_validate(settings.kyc_schema if settings and settings.kyc_schema else {})
@@ -48,7 +48,7 @@ async def get_kyc_schema(
 async def save_kyc_schema(
     payload: KycSchemaPayload,
     claims: Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.COMPLIANCE))],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> KycSchemaPayload:
     settings = await db.get(TenantSettings, UUID(claims["tenant_id"]))
     if not settings:

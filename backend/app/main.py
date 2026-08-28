@@ -1,12 +1,9 @@
 """FastAPI application entry point for the brokerage CRM."""
 
-import asyncio
 from contextlib import asynccontextmanager
-import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
 
 from .config import get_settings
 from .api import router as api_router
@@ -17,33 +14,15 @@ from .api.v1.owner.system_control import router as system_control_router
 from .api.v1.broker.settings import router as broker_settings_router
 from .api.v1.trader.accounts import router as trader_accounts_router
 from .api.v1.broker.finance import router as finance_router
-from .db import SessionFactory
 from .api.v1.broker.risk import router as risk_router
-from .workers.price_streamer import PriceStreamer
-from .workers.risk_executor import RiskExecutor
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start market-data/risk loops and stop them cleanly during shutdown."""
-    if os.getenv("RUN_BACKGROUND_WORKERS", "false").lower() != "true":
-        yield
-        return
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
-    price_streamer = PriceStreamer(SessionFactory, redis)
-    risk_executor = RiskExecutor(SessionFactory, redis)
-    app.state.price_streamer = price_streamer
-    app.state.risk_executor = risk_executor
-    tasks = [asyncio.create_task(price_streamer.run()), asyncio.create_task(risk_executor.run())]
-    try:
-        yield
-    finally:
-        await price_streamer.stop()
-        await risk_executor.stop()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await redis.aclose()
+    """Keep trading workers out of web processes; run them as a dedicated service."""
+    yield
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)

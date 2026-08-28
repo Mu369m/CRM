@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....db import get_db
-from ....models import LedgerEntry, LedgerEntryType, PaymentGateway, PaymentGatewayType, Role, Transaction, TransactionStatus, TransactionType, Wallet
+from ....core.db_router import get_tenant_db
+from ....models import LedgerEntry, LedgerEntryType, PaymentGateway, PaymentGatewayType, Role, Transaction, TransactionStatus, TransactionType, User, Wallet
 from ....security import require_roles
 
 router = APIRouter(tags=["Finance"])
@@ -81,7 +81,7 @@ broker_claims = Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN
 
 
 @router.post("/api/v1/trader/finance/request", response_model=TransactionResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_finance_transaction(payload: TransactionRequest, claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))], db: AsyncSession = Depends(get_db)) -> Transaction:
+async def request_finance_transaction(payload: TransactionRequest, claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))], db: AsyncSession = Depends(get_tenant_db)) -> Transaction:
     if payload.gateway_id:
         gateway = await db.scalar(select(PaymentGateway).where(PaymentGateway.id == payload.gateway_id, PaymentGateway.tenant_id == UUID(claims["tenant_id"]), PaymentGateway.is_active.is_(True)))
         if not gateway:
@@ -96,7 +96,7 @@ async def request_finance_transaction(payload: TransactionRequest, claims: Annot
 @router.get("/api/v1/broker/finance/transactions", response_model=TransactionPage)
 async def list_transactions(
     claims: broker_claims,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     transaction_status: TransactionStatus | None = Query(default=None, alias="status"),
     transaction_type: TransactionType | None = Query(default=None, alias="type"),
     offset: int = Query(default=0, ge=0),
@@ -114,10 +114,15 @@ async def list_transactions(
 
 
 @router.post("/api/v1/broker/finance/transactions/{transaction_id}/approve", response_model=SettlementResponse)
-async def approve_transaction(transaction_id: UUID, claims: broker_claims, db: AsyncSession = Depends(get_db)) -> SettlementResponse:
+async def approve_transaction(transaction_id: UUID, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> SettlementResponse:
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.tenant_id == UUID(claims["tenant_id"])).with_for_update())
     if not transaction or transaction.status != TransactionStatus.PENDING:
         raise HTTPException(status_code=404, detail="Pending transaction not found")
+    await db.scalar(
+        select(User)
+        .where(User.id == transaction.trader_id, User.tenant_id == transaction.tenant_id)
+        .with_for_update()
+    )
     wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == transaction.trader_id, Wallet.tenant_id == transaction.tenant_id, Wallet.currency == transaction.currency).with_for_update())
     if not wallet:
         wallet = Wallet(tenant_id=transaction.tenant_id, owner_id=transaction.trader_id, currency=transaction.currency, balance=Decimal("0"))
@@ -137,7 +142,7 @@ async def approve_transaction(transaction_id: UUID, claims: broker_claims, db: A
 
 
 @router.post("/api/v1/broker/finance/transactions/{transaction_id}/reject", response_model=TransactionResponse)
-async def reject_transaction(transaction_id: UUID, payload: RejectionPayload, claims: broker_claims, db: AsyncSession = Depends(get_db)) -> Transaction:
+async def reject_transaction(transaction_id: UUID, payload: RejectionPayload, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> Transaction:
     transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.tenant_id == UUID(claims["tenant_id"])).with_for_update())
     if not transaction or transaction.status != TransactionStatus.PENDING:
         raise HTTPException(status_code=404, detail="Pending transaction not found")
@@ -149,13 +154,13 @@ async def reject_transaction(transaction_id: UUID, payload: RejectionPayload, cl
 
 
 @router.get("/api/v1/broker/finance/gateways", response_model=list[GatewayResponse])
-async def list_gateways(claims: broker_claims, db: AsyncSession = Depends(get_db)) -> list[PaymentGateway]:
+async def list_gateways(claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> list[PaymentGateway]:
     gateways = await db.scalars(select(PaymentGateway).where(PaymentGateway.tenant_id == UUID(claims["tenant_id"])).order_by(PaymentGateway.name))
     return list(gateways)
 
 
 @router.post("/api/v1/broker/finance/gateways", response_model=GatewayResponse, status_code=status.HTTP_201_CREATED)
-async def create_gateway(payload: GatewayPayload, claims: broker_claims, db: AsyncSession = Depends(get_db)) -> PaymentGateway:
+async def create_gateway(payload: GatewayPayload, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> PaymentGateway:
     gateway = PaymentGateway(tenant_id=UUID(claims["tenant_id"]), name=payload.name.strip(), type=payload.type, is_active=payload.is_active, config_json=payload.config_json.model_dump(mode="json"))
     db.add(gateway)
     await db.commit()

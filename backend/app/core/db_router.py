@@ -8,9 +8,11 @@ from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import select
 
 from ..crypto import decrypt_field
 from ..db import SessionFactory
+from ..models import Tenant
 from ..models.master import BrokerTenant
 from ..security import current_claims
 
@@ -64,6 +66,24 @@ async def close_tenant_engines() -> None:
     await asyncio.gather(*(engine.dispose() for engine in engines))
 
 
+async def get_tenant_session_factories() -> list[tuple[UUID, async_sessionmaker[AsyncSession]]]:
+    """Build tenant-scoped factories from the master registry for background workers."""
+    async with SessionFactory() as master_db:
+        brokers = list(await master_db.scalars(select(BrokerTenant).where(BrokerTenant.is_active.is_(True))))
+        shared_tenants = list(await master_db.scalars(select(Tenant).where(Tenant.is_active.is_(True))))
+    factories: list[tuple[UUID, async_sessionmaker[AsyncSession]]] = []
+    broker_ids = {broker.id for broker in brokers}
+    for broker in brokers:
+        if broker.encrypted_db_url:
+            engine = await get_tenant_engine(broker)
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+        else:
+            factory = SessionFactory
+        factories.append((broker.id, factory))
+    factories.extend((tenant.id, SessionFactory) for tenant in shared_tenants if tenant.id not in broker_ids)
+    return factories
+
+
 async def invalidate_tenant_engine(tenant_id: UUID) -> None:
     """Dispose one cached pool after a broker changes its private database URL."""
     async with _cache_lock:
@@ -75,9 +95,10 @@ async def invalidate_tenant_engine(tenant_id: UUID) -> None:
 async def get_tenant_db(
     claims: dict[str, str] = Depends(current_claims),
     x_tenant_id: str | None = Header(default=None),
+    x_tenant_host: str | None = Header(default=None, alias="X-Tenant-Host"),
     host: str = Header(default=""),
 ) -> AsyncIterator[AsyncSession]:
-    """Yield a private session only when header, JWT, and master registry agree."""
+    """Yield the tenant's private or shared-schema session after host validation."""
     try:
         claim_tenant = UUID(claims["tenant_id"])
         requested_tenant = UUID(x_tenant_id) if x_tenant_id else claim_tenant
@@ -87,16 +108,28 @@ async def get_tenant_db(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant identity mismatch")
     async with SessionFactory() as master_db:
         broker = await master_db.get(BrokerTenant, claim_tenant)
-    if not broker or not broker.is_active or not broker.encrypted_db_url:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Private tenant database is not configured")
-    request_host = host.split(":", 1)[0].lower()
-    allowed_hosts = {broker.subdomain.lower()}
-    if broker.custom_domain:
-        allowed_hosts.add(broker.custom_domain.lower())
+        shared_tenant = await master_db.get(Tenant, claim_tenant) if not broker else None
+    if not broker and not shared_tenant:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is not configured or active")
+    if (broker and not broker.is_active) or (shared_tenant and not shared_tenant.is_active):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is not configured or active")
+    request_host = (x_tenant_host or host).split(":", 1)[0].lower()
+    allowed_hosts = set()
+    if broker:
+        allowed_hosts.add(broker.subdomain.lower())
+        if broker.custom_domain:
+            allowed_hosts.add(broker.custom_domain.lower())
+    if shared_tenant:
+        if shared_tenant.subdomain:
+            allowed_hosts.add(shared_tenant.subdomain.lower())
+        if shared_tenant.custom_domain:
+            allowed_hosts.add(shared_tenant.custom_domain.lower())
     if request_host and request_host not in {"localhost", "127.0.0.1"} and request_host not in allowed_hosts:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant host does not match authenticated tenant")
-    engine = await get_tenant_engine(broker)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
+    factory = SessionFactory
+    if broker and broker.encrypted_db_url:
+        engine = await get_tenant_engine(broker)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         try:
             yield session

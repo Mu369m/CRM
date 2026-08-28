@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db, get_redis
+from .core.db_router import get_tenant_db
 from .crypto import decrypt_field, encrypt_field
 from .models import AuditLog, BonusRule, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, Tenant, TenantBranding, TenantSettings, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
@@ -53,7 +54,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
 @router.get("/me", response_model=UserResponse)
 async def me(
     claims: dict[str, str] = Depends(require_roles(*list(Role))),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> UserResponse:
     """Expose the authenticated principal without leaking sensitive fields."""
     user = await db.scalar(select(User).where(User.id == UUID(claims["sub"]), User.tenant_id == UUID(claims["tenant_id"])))
@@ -63,7 +64,7 @@ async def me(
 
 
 @router.post("/auth/2fa/setup", response_model=TwoFactorSetupResponse)
-async def setup_2fa(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def setup_2fa(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Generate and encrypt a TOTP secret; it becomes active only after verification."""
     user = await db.scalar(select(User).where(User.id == UUID(claims["sub"]), User.tenant_id == UUID(claims["tenant_id"])))
     if not user:
@@ -76,7 +77,7 @@ async def setup_2fa(claims: dict[str, str] = Depends(require_roles(*list(Role)))
 
 
 @router.post("/auth/2fa/verify")
-async def verify_2fa(payload: TwoFactorVerifyRequest, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def verify_2fa(payload: TwoFactorVerifyRequest, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Activate TOTP only when the submitted code validates against the encrypted secret."""
     user = await db.scalar(select(User).where(User.id == UUID(claims["sub"]), User.tenant_id == UUID(claims["tenant_id"])))
     if not user or not user.totp_secret_encrypted or not verify_totp(decrypt_field(user.totp_secret_encrypted), payload.code):
@@ -87,7 +88,7 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, claims: dict[str, str] = D
 
 
 @router.post("/kyc/documents")
-async def submit_kyc(payload: KycSubmission, claims: dict[str, str] = Depends(require_roles(Role.TRADER)), db: AsyncSession = Depends(get_db)):
+async def submit_kyc(payload: KycSubmission, claims: dict[str, str] = Depends(require_roles(Role.TRADER)), db: AsyncSession = Depends(get_tenant_db)):
     """Submit a storage reference; binary files stay in an external encrypted object store."""
     document = KycDocument(tenant_id=UUID(claims["tenant_id"]), user_id=UUID(claims["sub"]), document_type=payload.document_type, storage_key=payload.storage_key)
     db.add(document)
@@ -96,7 +97,7 @@ async def submit_kyc(payload: KycSubmission, claims: dict[str, str] = Depends(re
 
 
 @router.post("/kyc/documents/{document_id}/review")
-async def review_kyc(document_id: UUID, payload: KycReview, claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+async def review_kyc(document_id: UUID, payload: KycReview, claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db)):
     """Review only documents inside the caller's tenant and record the decision."""
     document = await db.scalar(select(KycDocument).where(KycDocument.id == document_id, KycDocument.tenant_id == UUID(claims["tenant_id"])))
     if not document:
@@ -107,7 +108,7 @@ async def review_kyc(document_id: UUID, payload: KycReview, claims: dict[str, st
 
 
 @router.post("/treasury/requests", response_model=MoneyRequestResponse)
-async def create_money_request(payload: MoneyRequestCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def create_money_request(payload: MoneyRequestCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Create an idempotent deposit/withdrawal request for the current principal."""
     existing = await db.scalar(select(MoneyRequest).where(MoneyRequest.idempotency_key == payload.idempotency_key, MoneyRequest.tenant_id == UUID(claims["tenant_id"])))
     if existing:
@@ -120,7 +121,7 @@ async def create_money_request(payload: MoneyRequestCreate, claims: dict[str, st
 
 
 @router.post("/trading-accounts", response_model=dict)
-async def register_trading_account(payload: TradingAccountCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def register_trading_account(payload: TradingAccountCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Persist normalized external account identity before connector synchronization."""
     account = TradingAccount(tenant_id=UUID(claims["tenant_id"]), user_id=UUID(claims["sub"]), **payload.model_dump())
     db.add(account)
@@ -130,7 +131,7 @@ async def register_trading_account(payload: TradingAccountCreate, claims: dict[s
 
 
 @router.get("/operations/summary")
-async def operations_summary(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def operations_summary(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Return tenant-scoped operational counts for the executive dashboard."""
     tenant_id = UUID(claims["tenant_id"])
     traders = await db.scalar(select(func.count(User.id)).where(User.tenant_id == tenant_id, User.role == Role.TRADER))
@@ -140,14 +141,14 @@ async def operations_summary(claims: dict[str, str] = Depends(require_roles(*lis
 
 
 @router.get("/kyc/queue")
-async def kyc_queue(claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+async def kyc_queue(claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db)):
     """List only pending documents in the reviewer's tenant."""
     documents = await db.scalars(select(KycDocument).where(KycDocument.tenant_id == UUID(claims["tenant_id"]), KycDocument.status == "PENDING").order_by(KycDocument.created_at))
     return [{"id": item.id, "user_id": item.user_id, "document_type": item.document_type, "created_at": item.created_at} for item in documents]
 
 
 @router.get("/settings", response_model=TenantSettingsPayload)
-async def tenant_settings(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+async def tenant_settings(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db), redis=Depends(get_redis)):
     """Return runtime branding/rule settings, preferring the hot Redis snapshot."""
     cache_key = f"tenant-settings:{claims['tenant_id']}"
     cached = await redis.get(cache_key)
@@ -162,7 +163,7 @@ async def tenant_settings(claims: dict[str, str] = Depends(require_roles(*list(R
 
 
 @router.put("/settings", response_model=TenantSettingsPayload)
-async def update_tenant_settings(payload: TenantSettingsPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+async def update_tenant_settings(payload: TenantSettingsPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db), redis=Depends(get_redis)):
     """Persist tenant configuration and invalidate the hot cache atomically after commit."""
     settings = await db.get(TenantSettings, UUID(claims["tenant_id"]))
     if not settings:
@@ -177,7 +178,7 @@ async def update_tenant_settings(payload: TenantSettingsPayload, claims: dict[st
 
 
 @router.put("/admin/rebate-rules", response_model=RebateRulePayload)
-async def upsert_rebate_rule(payload: RebateRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+async def upsert_rebate_rule(payload: RebateRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db)):
     """Upsert a runtime rebate rule within the authenticated tenant boundary."""
     tenant_id = UUID(claims["tenant_id"])
     rule = await db.scalar(select(RebateRule).where(RebateRule.tenant_id == tenant_id, RebateRule.instrument_group == payload.instrument_group, RebateRule.level == payload.level))
@@ -191,14 +192,14 @@ async def upsert_rebate_rule(payload: RebateRulePayload, claims: dict[str, str] 
 
 
 @router.get("/admin/rebate-rules", response_model=list[RebateRulePayload])
-async def list_rebate_rules(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.SALES)), db: AsyncSession = Depends(get_db)):
+async def list_rebate_rules(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.SALES)), db: AsyncSession = Depends(get_tenant_db)):
     """List tenant rebate rules for review and partner operations."""
     rules = await db.scalars(select(RebateRule).where(RebateRule.tenant_id == UUID(claims["tenant_id"])).order_by(RebateRule.level, RebateRule.instrument_group))
     return list(rules)
 
 
 @router.put("/admin/kyc-requirements", response_model=KycRequirementPayload)
-async def upsert_kyc_requirement(payload: KycRequirementPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.COMPLIANCE)), db: AsyncSession = Depends(get_db)):
+async def upsert_kyc_requirement(payload: KycRequirementPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.COMPLIANCE)), db: AsyncSession = Depends(get_tenant_db)):
     """Upsert a country-aware KYC document requirement."""
     tenant_id = UUID(claims["tenant_id"])
     requirement = await db.scalar(select(KycRequirement).where(KycRequirement.tenant_id == tenant_id, KycRequirement.document_type == payload.document_type))
@@ -212,7 +213,7 @@ async def upsert_kyc_requirement(payload: KycRequirementPayload, claims: dict[st
 
 
 @router.put("/admin/bonus-rules", response_model=BonusRulePayload)
-async def upsert_bonus_rule(payload: BonusRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_db)):
+async def upsert_bonus_rule(payload: BonusRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_tenant_db)):
     """Upsert deposit bonus and withdrawal volume target rules."""
     db.add(BonusRule(tenant_id=UUID(claims["tenant_id"]), **payload.model_dump()))
     await db.commit()
@@ -220,7 +221,7 @@ async def upsert_bonus_rule(payload: BonusRulePayload, claims: dict[str, str] = 
 
 
 @router.post("/admin/manager-connections", response_model=ManagerConnectionResponse)
-async def create_manager_connection(payload: ManagerConnectionPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+async def create_manager_connection(payload: ManagerConnectionPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db)):
     """Store provider credentials encrypted; only normalized metadata leaves the API."""
     import json
     credentials = json.dumps({"username": payload.username or payload.login, "password": payload.password})
@@ -232,7 +233,7 @@ async def create_manager_connection(payload: ManagerConnectionPayload, claims: d
 
 
 @router.get("/admin/manager-connections", response_model=list[ManagerConnectionResponse])
-async def list_manager_connections(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_db)):
+async def list_manager_connections(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_tenant_db)):
     """List manager metadata without exposing encrypted credentials."""
     connections = await db.scalars(select(ManagerConnection).where(ManagerConnection.tenant_id == UUID(claims["tenant_id"])).order_by(ManagerConnection.created_at.desc()))
     return list(connections)
@@ -243,7 +244,7 @@ async def create_external_account(
     connection_id: UUID,
     payload: MTAccountCreateSchema,
     claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Queue account provisioning only when a concrete broker transport is registered."""
     connection = await db.scalar(select(ManagerConnection).where(ManagerConnection.id == connection_id, ManagerConnection.tenant_id == UUID(claims["tenant_id"]), ManagerConnection.enabled.is_(True)))
@@ -257,7 +258,7 @@ async def create_external_account(
 
 
 @router.get("/wallet", response_model=WalletResponse)
-async def wallet(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db)):
+async def wallet(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Return only the wallet belonging to the current tenant principal."""
     wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == UUID(claims["sub"]), Wallet.tenant_id == UUID(claims["tenant_id"])))
     if not wallet:
@@ -269,7 +270,7 @@ async def wallet(claims: dict[str, str] = Depends(require_roles(*list(Role))), d
 async def adjust_wallet(
     adjustment: WalletAdjustment,
     claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Atomically lock, validate, update, and journal a wallet adjustment."""
     wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == UUID(claims["sub"]), Wallet.tenant_id == UUID(claims["tenant_id"])).with_for_update())

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....db import get_db
+from ....core.db_router import get_tenant_db
 from ....models import AccountPlatform, Role, TradingAccount, Wallet
 from ....security import require_roles
 
@@ -47,7 +47,7 @@ class AccountProvisionResponse(BaseModel):
 async def request_trading_account(
     payload: AccountRequestPayload,
     claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> AccountProvisionResponse:
     account = TradingAccount(tenant_id=UUID(claims["tenant_id"]), user_id=UUID(claims["sub"]), platform=payload.platform, external_login=f"pending-{uuid4()}", server=payload.server or "PENDING", is_demo=payload.is_demo, leverage=payload.leverage, is_locked=True, provisioning_status=ProvisioningStatus.PENDING)
     db.add(account)
@@ -61,7 +61,7 @@ async def approve_trading_account(
     account_id: UUID,
     payload: AccountApprovalPayload,
     claims: Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN))],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> AccountProvisionResponse:
     account = await db.scalar(select(TradingAccount).where(TradingAccount.id == account_id, TradingAccount.tenant_id == UUID(claims["tenant_id"]), TradingAccount.provisioning_status == ProvisioningStatus.PENDING).with_for_update())
     if not account:
