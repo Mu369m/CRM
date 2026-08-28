@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 30
     field_encryption_key: SecretStr
+    webhook_signing_secret: SecretStr
     cors_origins: list[str] = ["http://localhost:3000"]
 
 

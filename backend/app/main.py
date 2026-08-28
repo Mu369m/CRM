@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .api import router as api_router
+from .webhooks import router as webhook_router
 
 settings = get_settings()
 
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 app.include_router(api_router)
+app.include_router(webhook_router)
 
 
 @app.get("/health", tags=["system"])
