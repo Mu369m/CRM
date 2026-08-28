@@ -36,6 +36,20 @@ class LedgerEntryType(StrEnum):
     ADJUSTMENT = "ADJUSTMENT"
 
 
+class RequestStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+
+
+class AccountPlatform(StrEnum):
+    MT4 = "MT4"
+    MT5 = "MT5"
+    CTRADER = "CTRADER"
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -55,6 +69,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(default=Role.TRADER)
     kyc_status: Mapped[KycStatus] = mapped_column(default=KycStatus.PENDING)
+    totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     tenant: Mapped[Tenant] = relationship(back_populates="users")
     wallet: Mapped["Wallet | None"] = relationship(back_populates="owner", uselist=False)
@@ -107,4 +123,63 @@ class WebhookEvent(Base):
     event_id: Mapped[str] = mapped_column(String(180))
     payload: Mapped[dict] = mapped_column(JSON)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KycDocument(Base):
+    __tablename__ = "kyc_documents"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    document_type: Mapped[str] = mapped_column(String(50))
+    storage_key: Mapped[str] = mapped_column(Text)
+    status: Mapped[KycStatus] = mapped_column(default=KycStatus.PENDING)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TradingAccount(Base):
+    __tablename__ = "trading_accounts"
+    __table_args__ = (UniqueConstraint("platform", "external_login", "server", name="uq_trading_account_external"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    platform: Mapped[AccountPlatform] = mapped_column()
+    external_login: Mapped[str] = mapped_column(String(80))
+    server: Mapped[str] = mapped_column(String(160))
+    is_demo: Mapped[bool] = mapped_column(default=False)
+    leverage: Mapped[int] = mapped_column(default=100)
+    is_locked: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MoneyRequest(Base):
+    __tablename__ = "money_requests"
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_money_request_idempotency"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    currency: Mapped[str] = mapped_column(String(3))
+    status: Mapped[RequestStatus] = mapped_column(default=RequestStatus.PENDING)
+    provider_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IbPartner(Base):
+    __tablename__ = "ib_partners"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    parent_id: Mapped[UUID | None] = mapped_column(ForeignKey("ib_partners.id"), nullable=True, index=True)
+    referral_code: Mapped[str] = mapped_column(String(50), unique=True)
+    commission_rate: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=Decimal("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
