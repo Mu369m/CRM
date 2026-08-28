@@ -1,6 +1,7 @@
 """Alembic async migration environment."""
 
 import asyncio
+import os
 
 from alembic import context
 from sqlalchemy import pool
@@ -10,7 +11,7 @@ from app.config import get_settings
 from app.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", os.getenv("ALEMBIC_DATABASE_URL", get_settings().database_url))
 target_metadata = Base.metadata
 
 

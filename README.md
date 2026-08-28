@@ -17,3 +17,9 @@ Institution-grade, multi-tenant brokerage CRM for trader onboarding, treasury, c
 5. Run the web app: `npm run dev` from `frontend/`.
 
 The existing `mt5` repository is separate and is not part of this project.
+
+## BYODB deployment model
+
+The SaaS master database stores broker registry metadata and an AES-256-GCM encrypted private database URL. Broker client records are migrated to and stored in the broker's own PostgreSQL database. Configure it through `PUT /api/v1/admin/settings/database` with a broker-admin JWT and `X-Tenant-ID`/tenant claims; the API verifies `SELECT 1`, runs the checked-in Alembic chain remotely, then replaces the cached tenant pool.
+
+Run `backend/master_schema.sql` only against the SaaS master database. Never run it against a broker database. The remote tenant migration chain is managed by `backend/alembic` and never stores the master broker registry there.

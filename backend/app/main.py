@@ -9,6 +9,7 @@ from .config import get_settings
 from .api import router as api_router
 from .webhooks import router as webhook_router
 from .auth_v1 import router as auth_v1_router
+from .api_byodb import router as byodb_router
 
 settings = get_settings()
 
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(api_router)
 app.include_router(webhook_router)
 app.include_router(auth_v1_router)
+app.include_router(byodb_router)
 
 
 @app.get("/health", tags=["system"])
