@@ -1,38 +1,51 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-interface TenantSettings {
-  primary_color: string;
-  secondary_color: string;
-  logo_url?: string | null;
-  favicon_url?: string | null;
-  meta_title: string;
-  support_email?: string | null;
+export interface TenantBranding {
+  companyName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  logoUrl?: string;
+  faviconUrl?: string;
+  metaTitle?: string;
+  supportEmail?: string | null;
 }
 
+const TenantContext = createContext<{ branding: TenantBranding | null }>({ branding: null });
+
 export function TenantProvider({ children }: { children: ReactNode }) {
+  const [branding, setBranding] = useState<TenantBranding | null>(null);
+
   useEffect(() => {
-    const token = window.localStorage.getItem("access_token");
-    if (!token) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-    fetch(`${apiUrl}/api/settings`, { headers: { Authorization: `Bearer ${token}`, "X-Tenant-Host": window.location.host } })
+    const domain = window.location.hostname;
+    fetch(`${apiUrl}/api/v1/tenant/config?domain=${encodeURIComponent(domain)}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((settings: TenantSettings | null) => {
-        if (!settings) return;
+      .then((settings: { company_name: string; primary_color: string; secondary_color: string; logo_url?: string | null; favicon_url?: string | null; meta_title: string; support_email?: string | null } | null) => {
+        if (!settings) throw new Error("Tenant branding unavailable");
+        const nextBranding: TenantBranding = { companyName: settings.company_name, primaryColor: settings.primary_color, secondaryColor: settings.secondary_color, logoUrl: settings.logo_url ?? undefined, faviconUrl: settings.favicon_url ?? undefined, metaTitle: settings.meta_title, supportEmail: settings.support_email };
+        setBranding(nextBranding);
         const root = document.documentElement;
-        root.style.setProperty("--tenant-primary", settings.primary_color);
-        root.style.setProperty("--tenant-secondary", settings.secondary_color);
-        document.title = settings.meta_title;
-        if (settings.favicon_url) {
+        root.style.setProperty("--primary", nextBranding.primaryColor);
+        root.style.setProperty("--secondary", nextBranding.secondaryColor);
+        root.style.setProperty("--tenant-primary", nextBranding.primaryColor);
+        root.style.setProperty("--tenant-secondary", nextBranding.secondaryColor);
+        document.title = nextBranding.metaTitle ?? nextBranding.companyName;
+        if (nextBranding.faviconUrl) {
           const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");
           favicon.rel = "icon";
-          favicon.href = settings.favicon_url;
+          favicon.href = nextBranding.faviconUrl;
           document.head.appendChild(favicon);
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        document.documentElement.style.setProperty("--primary", "#0F172A");
+        document.documentElement.style.setProperty("--secondary", "#3B82F6");
+      });
   }, []);
 
-  return children;
+  return <TenantContext.Provider value={{ branding }}>{children}</TenantContext.Provider>;
 }
+
+export const useTenant = () => useContext(TenantContext);

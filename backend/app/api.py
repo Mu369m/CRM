@@ -4,19 +4,33 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db, get_redis
 from .crypto import decrypt_field, encrypt_field
-from .models import AuditLog, BonusRule, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, TenantSettings, TradingAccount, User, Wallet
+from .models import AuditLog, BonusRule, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, Tenant, TenantBranding, TenantSettings, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
 from .security import create_access_token, new_totp_secret, require_roles, verify_password, verify_totp
 from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, MoneyRequestResponse, TwoFactorSetupResponse, TwoFactorVerifyRequest, TradingAccountCreate
 from .settings_schemas import TenantSettingsPayload
 from .admin_schemas import BonusRulePayload, KycRequirementPayload, ManagerConnectionPayload, ManagerConnectionResponse, RebateRulePayload
+from .branding_schemas import TenantBrandingResponse
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/v1/tenant/config", response_model=TenantBrandingResponse, tags=["tenant"])
+async def public_tenant_config(domain: str, db: AsyncSession = Depends(get_db)):
+    """Resolve public branding by exact subdomain or custom domain, without auth data."""
+    tenant = await db.scalar(select(Tenant).where(Tenant.is_active.is_(True), or_(Tenant.subdomain == domain, Tenant.custom_domain == domain)))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant domain not found")
+    branding = await db.scalar(select(TenantBranding).where(TenantBranding.tenant_id == tenant.id))
+    if not branding:
+        raise HTTPException(status_code=404, detail="Tenant branding not configured")
+    settings = await db.get(TenantSettings, tenant.id)
+    return TenantBrandingResponse(company_name=tenant.name, primary_color=branding.primary_color, secondary_color=branding.secondary_color, logo_url=branding.logo_url, favicon_url=branding.favicon_url, meta_title=settings.meta_title if settings else tenant.name, support_email=settings.support_email if settings else None)
 
 
 @router.post("/auth/login", response_model=TokenResponse)
