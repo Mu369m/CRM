@@ -16,9 +16,11 @@ class Base(DeclarativeBase):
 
 class Role(StrEnum):
     SUPER_ADMIN = "SUPER_ADMIN"
+    BROKER_ADMIN = "BROKER_ADMIN"
     COMPLIANCE = "COMPLIANCE"
     FINANCE = "FINANCE"
     SALES = "SALES"
+    IB_PARTNER = "IB_PARTNER"
     TRADER = "TRADER"
 
 
@@ -50,6 +52,11 @@ class AccountPlatform(StrEnum):
     CTRADER = "CTRADER"
 
 
+class RebateType(StrEnum):
+    PER_LOT_FIXED = "PER_LOT_FIXED"
+    PERCENTAGE_SPREAD = "PERCENTAGE_SPREAD"
+
+
 class RebateStrategy(StrEnum):
     PER_LOT_FIXED = "PER_LOT_FIXED"
     PERCENTAGE_SPREAD = "PERCENTAGE_SPREAD"
@@ -61,10 +68,14 @@ class Tenant(Base):
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(160))
+    subdomain: Mapped[str | None] = mapped_column(String(50), unique=True, index=True, nullable=True)
+    custom_domain: Mapped[str | None] = mapped_column(String(160), unique=True, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
     wallets: Mapped[list["Wallet"]] = relationship(back_populates="tenant")
     settings: Mapped["TenantSettings | None"] = relationship(back_populates="tenant", uselist=False)
+    branding: Mapped["TenantBranding | None"] = relationship(back_populates="tenant", uselist=False)
 
 
 class User(Base):
@@ -76,6 +87,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(default=Role.TRADER)
     kyc_status: Mapped[KycStatus] = mapped_column(default=KycStatus.PENDING)
+    is_kyc_verified: Mapped[bool] = mapped_column(default=False)
+    parent_ib_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -244,6 +257,40 @@ class BonusRule(Base):
     max_credit: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     withdrawal_lot_target: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class TenantBranding(Base):
+    __tablename__ = "tenant_brandings"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), unique=True)
+    primary_color: Mapped[str] = mapped_column(String(7), default="#0F172A")
+    secondary_color: Mapped[str] = mapped_column(String(7), default="#3B82F6")
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favicon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tenant: Mapped[Tenant] = relationship(back_populates="branding")
+
+
+class MTServerConfig(Base):
+    __tablename__ = "mt_server_configs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    server_name: Mapped[str] = mapped_column(String(100))
+    platform_type: Mapped[AccountPlatform] = mapped_column()
+    manager_ip: Mapped[str] = mapped_column(String(100))
+    encrypted_credentials: Mapped[str] = mapped_column(Text)
+
+
+class IBRebateRule(Base):
+    __tablename__ = "ib_rebate_rules"
+    __table_args__ = (UniqueConstraint("tenant_id", "rule_name", name="uq_ib_rebate_rule_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    rule_name: Mapped[str] = mapped_column(String(100))
+    rebate_type: Mapped[RebateType] = mapped_column()
+    tier_rates: Mapped[dict] = mapped_column(JSON, default=lambda: {"1": 8.0, "2": 4.0, "3": 2.0})
 
 
 class ManagerConnection(Base):
