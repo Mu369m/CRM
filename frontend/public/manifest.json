@@ -1,0 +1,11 @@
+{
+  "name": "Northstar Brokerage CRM",
+  "short_name": "Northstar CRM",
+  "description": "Secure brokerage operations and trader workspace.",
+  "start_url": "/trader-cabinet",
+  "display": "standalone",
+  "background_color": "#070A11",
+  "theme_color": "#0D121F",
+  "orientation": "portrait-primary",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
