@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import BroadcastBanner from "@/components/dashboard/BroadcastBanner";
 
 const navItems = ["Overview", "Clients", "Treasury", "Compliance", "IB Network"];
 
@@ -33,6 +34,7 @@ export default function Home() {
       </aside>
 
       <section className="content">
+        <BroadcastBanner />
         <header className="topbar"><div><p className="eyebrow">Monday, 18 March 2024</p><h1>{active}</h1></div><div className="top-actions"><button className="icon-button" aria-label="Search">⌕</button><button className="icon-button notification" aria-label="Notifications">♢<span /></button><div className="top-avatar">RK</div></div></header>
         <div className="toolbar"><div className="live-pill"><span className="pulse" /> All systems operational</div><button className="date-button">Last 30 days <span>⌄</span></button></div>
 

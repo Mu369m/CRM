@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@keyframes admin-live-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, .35); } 50% { opacity: .7; box-shadow: 0 0 0 5px rgba(52, 211, 153, 0); } }
+.admin-analytics .kicker { margin: 0 0 8px; color: #38bdf8; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.admin-analytics .heading { margin: 0; color: #f8fafc; font-size: 19px; font-weight: 600; }
+.admin-analytics .dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; }
+.admin-analytics .live-pulse { animation: admin-live-pulse 2s ease-in-out infinite; }
+
+@keyframes broadcast-marquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 1.5rem)); } }
+.broadcast-marquee { animation: broadcast-marquee 22s linear infinite; }
+.broadcast-marquee:hover { animation-play-state: paused; }
+
 :root { --ink: #172923; --muted: #72817c; --line: #e3e9e5; --paper: #f7faf8; --mint: var(--tenant-primary, #45b69c); --navy: var(--tenant-secondary, #1d3430); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Georgia, "Times New Roman", serif; }
