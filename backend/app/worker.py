@@ -1,4 +1,10 @@
-"""Celery entry point for durable CRM automation jobs."""
+"""Celery entry point - DEPRECATED.
+
+The current production system uses custom async workers (PriceStreamer, RiskExecutor)
+for real-time trading tasks. Celery is configured but not deployed in production.
+
+Future: Use this for durable n8n automation tasks or remove if not needed.
+"""
 
 import os
 

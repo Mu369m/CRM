@@ -1,5 +1,6 @@
 """Trader account provisioning request and approval workflow."""
 
+import logging
 from enum import StrEnum
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -8,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from ....core.db_router import get_tenant_db
 from ....models import AccountPlatform, Role, TradingAccount, Wallet
@@ -53,6 +56,7 @@ async def request_trading_account(
     db.add(account)
     await db.commit()
     await db.refresh(account)
+    logger.info(f"Trading account request created: {account.id}, platform={payload.platform}, leverage={payload.leverage}, tenant={claims['tenant_id']}")
     return AccountProvisionResponse(id=account.id, platform=account.platform, is_demo=account.is_demo, leverage=account.leverage, provisioning_status=ProvisioningStatus(account.provisioning_status))
 
 
@@ -70,6 +74,7 @@ async def approve_trading_account(
     account.server = payload.server
     account.provisioning_status = ProvisioningStatus.APPROVED
     account.is_locked = False
+    logger.info(f"Trading account {account_id} approved: login={payload.external_login}, server={payload.server}, tenant={claims['tenant_id']}")
     wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == account.user_id, Wallet.tenant_id == account.tenant_id).with_for_update())
     wallet_created = wallet is None
     if wallet_created:

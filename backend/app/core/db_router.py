@@ -10,6 +10,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import select
 
+from ..config import get_settings
 from ..crypto import decrypt_field
 from ..db import SessionFactory
 from ..models import Tenant
@@ -124,7 +125,8 @@ async def get_tenant_db(
             allowed_hosts.add(shared_tenant.subdomain.lower())
         if shared_tenant.custom_domain:
             allowed_hosts.add(shared_tenant.custom_domain.lower())
-    if request_host and request_host not in {"localhost", "127.0.0.1"} and request_host not in allowed_hosts:
+    env = get_settings().environment
+    if env == "production" and request_host and request_host not in {"localhost", "127.0.0.1"} and request_host not in allowed_hosts:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant host does not match authenticated tenant")
     factory = SessionFactory
     if broker and broker.encrypted_db_url:

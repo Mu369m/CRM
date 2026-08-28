@@ -1,11 +1,15 @@
 """FastAPI application entry point for the brokerage CRM."""
 
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 from .api import router as api_router
 from .webhooks import router as webhook_router
 from .auth_v1 import router as auth_v1_router
@@ -20,14 +24,23 @@ from .api.v1.trader.ib import router as trader_ib_router
 from .api.v1.trader.finance import router as trader_finance_router, payments_router
 from .api.v1.broker.finance import router as finance_router
 from .api.v1.broker.risk import router as risk_router
+from .api.v1.broker.payments import router as broker_payments_router
+from .api.v1.owner.payments import router as owner_payments_router
 
 settings = get_settings()
+
+logging.basicConfig(
+    level=settings.log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Keep trading workers out of web processes; run them as a dedicated service."""
+    logger.info(f"CRM API starting - environment: {settings.environment}, workers enabled: {os.getenv('RUN_BACKGROUND_WORKERS', 'false')}")
     yield
+    logger.info("CRM API shutting down")
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
@@ -53,6 +66,8 @@ app.include_router(trader_finance_router)
 app.include_router(payments_router)
 app.include_router(finance_router)
 app.include_router(risk_router)
+app.include_router(broker_payments_router)
+app.include_router(owner_payments_router)
 
 
 @app.get("/health", tags=["system"])

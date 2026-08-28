@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from redis.asyncio import Redis
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -70,17 +73,27 @@ class RiskExecutor:
                 for (tenant_id, account_id), account_positions in by_account.items():
                     await self._evaluate_account(session, rule_by_tenant.get(tenant_id), account_id, account_positions)
                 await session.commit()
+                logger.debug(f"Risk evaluation complete for tenant {self._tenant_id}: {len(positions)} positions evaluated")
 
     async def _evaluate_account(self, session: AsyncSession, rule: RiskRule | None, account_id: object, positions: list[Position]) -> None:
         if not rule:
+            logger.debug(f"No risk rule configured for tenant {self._tenant_id}")
             return
         trader_id = positions[0].trader_id
         wallet = await session.scalar(select(Wallet).where(Wallet.owner_id == trader_id, Wallet.tenant_id == positions[0].tenant_id, Wallet.currency == "USD").with_for_update())
         equity = (wallet.balance if wallet else Decimal("0")) + sum((mark_to_market(position, _position_tick(position)) for position in positions), Decimal("0"))
-        margin_used = sum((position.open_price * position.volume / Decimal(rule.max_leverage) for position in positions), Decimal("0"))
+        margin_used = sum(
+            (
+                (position.current_price if position.current_price else position.open_price) 
+                * position.volume / Decimal(rule.max_leverage)
+            )
+            for position in positions
+        )
         margin_level = Decimal("0") if margin_used <= 0 else equity / margin_used * Decimal("100")
+        logger.info(f"Account {account_id}: margin_level={margin_level:.2f}%, stop_out_threshold={rule.stop_out_level}%, margin_call_threshold={rule.margin_call_level}%")
         key = (str(positions[0].tenant_id), str(account_id))
         if margin_level <= rule.stop_out_level:
+            logger.warning(f"STOP_OUT executed for account {account_id} on tenant {self._tenant_id}: margin_level={margin_level:.2f}%")
             for position in positions:
                 now = datetime.now(UTC)
                 realized = mark_to_market(position, _position_tick(position))
@@ -96,6 +109,7 @@ class RiskExecutor:
             self._alerted_accounts.discard(key)
             return
         if margin_level <= rule.margin_call_level and key not in self._alerted_accounts:
+            logger.warning(f"MARGIN_CALL alert for account {account_id} on tenant {self._tenant_id}: margin_level={margin_level:.2f}%")
             session.add(AuditLog(tenant_id=positions[0].tenant_id, actor_id=trader_id, action="MARGIN_CALL_ALERT", metadata_json=json.dumps({"account_id": str(account_id), "margin_level": str(margin_level), "threshold": str(rule.margin_call_level)})))
             self._alerted_accounts.add(key)
             await self._redis.publish(f"tenant:{self._tenant_id}:risk:alerts", json.dumps({"type": "margin_call", "tenant_id": str(self._tenant_id), "account_id": str(account_id), "margin_level": str(margin_level)}))

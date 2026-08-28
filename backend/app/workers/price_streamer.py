@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from decimal import Decimal
@@ -9,6 +10,8 @@ from typing import Protocol
 from uuid import UUID
 
 from redis.asyncio import Redis
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -80,6 +83,7 @@ class PriceStreamer:
     async def _apply_tick(self, tick: PriceTick) -> None:
         lock = self._redis.lock(f"locks:prices:{self._tenant_id}", timeout=60, blocking_timeout=1)
         if not await lock.acquire():
+            logger.debug(f"Could not acquire price lock for {tick.symbol} on tenant {self._tenant_id}, skipping this tick")
             return
         try:
             await self._apply_tick_unlocked(tick)
@@ -100,6 +104,7 @@ class PriceStreamer:
                     updates.append({"position_id": str(position.id), "symbol": position.symbol, "floating_pnl": str(position.floating_pnl), "current_price": str(position.current_price)})
                 await session.commit()
         if updates:
+            logger.debug(f"Updated {len(updates)} positions for symbol {tick.symbol} on tenant {self._tenant_id}")
             await self._redis.publish(f"tenant:{self._tenant_id}:positions:pnl", json.dumps({"type": "position_pnl_updated", "tenant_id": str(self._tenant_id), "updates": updates}))
 
     async def stop(self) -> None:

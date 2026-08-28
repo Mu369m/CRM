@@ -1,10 +1,13 @@
 """Atomic CRM-side trading settlement primitives."""
 
+import logging
 from decimal import Decimal
 from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from .commissions import process_trade_rebate
 from .models import LedgerEntry, LedgerEntryType, Position, TradeHistory, Wallet
@@ -33,7 +36,14 @@ async def settle_position_closure(
         .with_for_update()
     )
     if not wallet:
-        raise ValueError(f"USD wallet missing for trader {position.trader_id}")
+        logger.warning(f"Creating missing USD wallet for trader {position.trader_id} on tenant {position.tenant_id}")
+        wallet = Wallet(
+            tenant_id=position.tenant_id,
+            owner_id=position.trader_id,
+            currency="USD",
+            balance=Decimal("0")
+        )
+        session.add(wallet)
     if wallet.balance + realized_pnl < 0:
         raise ValueError(f"Settlement would make wallet {wallet.id} negative")
 
@@ -41,6 +51,7 @@ async def settle_position_closure(
     position.is_open = False
     position.closed_at = closed_at
     wallet.balance += realized_pnl
+    logger.info(f"Settling position {position.id}: symbol={position.symbol}, volume={position.volume}, realized_pnl={realized_pnl}, reason={close_reason}")
     session.add(
         LedgerEntry(
             wallet_id=wallet.id,
