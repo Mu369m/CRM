@@ -22,6 +22,9 @@ async def get_db() -> AsyncIterator[AsyncSession]:
             raise
 
 
+get_master_db = get_db
+
+
 async def get_redis() -> AsyncIterator[Redis]:
     """Yield a Redis client; callers own commands, shutdown closes the shared pool."""
     client = Redis.from_url(settings.redis_url, decode_responses=True)

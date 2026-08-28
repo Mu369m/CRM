@@ -10,6 +10,7 @@ from .api import router as api_router
 from .webhooks import router as webhook_router
 from .auth_v1 import router as auth_v1_router
 from .api_byodb import router as byodb_router
+from .api.v1.owner.system_control import router as system_control_router
 
 settings = get_settings()
 
@@ -32,6 +33,7 @@ app.include_router(api_router)
 app.include_router(webhook_router)
 app.include_router(auth_v1_router)
 app.include_router(byodb_router)
+app.include_router(system_control_router)
 
 
 @app.get("/health", tags=["system"])

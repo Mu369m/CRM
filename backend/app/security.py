@@ -70,3 +70,10 @@ def require_roles(*allowed: Role):
         return claims
 
     return dependency
+
+
+def get_current_owner_user(claims: dict[str, str] = Depends(current_claims)) -> dict[str, str]:
+    """Authorize the SaaS master owner without trusting client-supplied identity."""
+    if claims.get("role") != Role.SUPER_ADMIN.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner permissions required")
+    return claims

@@ -1,6 +1,7 @@
 """Versioned CRM endpoints with transaction-safe treasury operations."""
 
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,6 +18,9 @@ from .settings_schemas import TenantSettingsPayload
 from .admin_schemas import BonusRulePayload, KycRequirementPayload, ManagerConnectionPayload, ManagerConnectionResponse, RebateRulePayload
 from .branding_schemas import TenantBrandingResponse
 from .mt_adapter import MTAccountCreateSchema, MTManagerAdapter
+
+# Keep the legacy app/api.py router importable while exposing versioned subrouters.
+__path__ = [str(Path(__file__).with_name("api"))]
 
 router = APIRouter(prefix="/api")
 

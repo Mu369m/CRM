@@ -26,3 +26,17 @@ class BrokerTenant(MasterBase):
     subscription_status: Mapped[str] = mapped_column(String(30), default="TRIAL")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SystemBroadcast(MasterBase):
+    """Global banner configuration stored in the SaaS master database."""
+
+    __tablename__ = "system_broadcasts"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    broadcast_type: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    target_brokers: Mapped[str] = mapped_column(String(30), default="ALL_BROKERS")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
