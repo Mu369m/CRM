@@ -1,0 +1,13 @@
+"use client";
+
+import { useState, type FormEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { LockKeyhole, LogIn } from "lucide-react";
+
+export default function TraderLoginPage() {
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  async function submit(event: FormEvent) { event.preventDefault(); setLoading(true); setError(""); const hostname = window.location.hostname; try { const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/trader/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", "X-Tenant-Host": hostname }, body: JSON.stringify({ email, password, tenant_host: hostname }) }); const data = await response.json().catch(() => ({})); if (!response.ok || !data.access_token) throw new Error(data.detail ?? "Unable to sign in."); localStorage.setItem("access_token", data.access_token); router.push("/trader/dashboard"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to sign in."); } finally { setLoading(false); } }
+  return <AuthShell title="Trader sign in" subtitle="Access your secure brokerage workspace."><form className="space-y-4" onSubmit={submit}><label>Email<input className="auth-input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input className="auth-input" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <p className="text-xs text-rose-300">{error}</p>}<button className="auth-button" disabled={loading} type="submit"><LogIn size={16} />{loading ? "Signing in..." : "Sign in"}</button><p className="text-center text-xs text-slate-500">New trader? <a className="text-cyan-300" href="/trader/register">Create an account</a></p></form></AuthShell>;
+}
+function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) { return <main className="grid min-h-screen place-items-center bg-[#070A11] p-5 text-slate-200"><section className="w-full max-w-md rounded-lg border border-slate-800 bg-[#0D121F] p-7"><div className="mb-7 text-center"><span className="mx-auto mb-4 grid size-11 place-items-center rounded-md bg-cyan-400/10 text-cyan-300"><LockKeyhole size={20} /></span><h1 className="text-2xl font-semibold text-white">{title}</h1><p className="mt-2 text-sm text-slate-500">{subtitle}</p></div>{children}</section></main>; }
