@@ -16,6 +16,7 @@ from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, Mone
 from .settings_schemas import TenantSettingsPayload
 from .admin_schemas import BonusRulePayload, KycRequirementPayload, ManagerConnectionPayload, ManagerConnectionResponse, RebateRulePayload
 from .branding_schemas import TenantBrandingResponse
+from .mt_adapter import MTAccountCreateSchema, MTManagerAdapter
 
 router = APIRouter(prefix="/api")
 
@@ -217,7 +218,9 @@ async def upsert_bonus_rule(payload: BonusRulePayload, claims: dict[str, str] = 
 @router.post("/admin/manager-connections", response_model=ManagerConnectionResponse)
 async def create_manager_connection(payload: ManagerConnectionPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
     """Store provider credentials encrypted; only normalized metadata leaves the API."""
-    connection = ManagerConnection(tenant_id=UUID(claims["tenant_id"]), platform=payload.platform, name=payload.name, server=payload.server, login=payload.login, encrypted_password=encrypt_field(payload.password), enabled=payload.enabled)
+    import json
+    credentials = json.dumps({"username": payload.username or payload.login, "password": payload.password})
+    connection = ManagerConnection(tenant_id=UUID(claims["tenant_id"]), platform=payload.platform, name=payload.name, server=payload.server, login=payload.login, encrypted_password=encrypt_field(credentials), enabled=payload.enabled)
     db.add(connection)
     await db.commit()
     await db.refresh(connection)
@@ -229,6 +232,24 @@ async def list_manager_connections(claims: dict[str, str] = Depends(require_role
     """List manager metadata without exposing encrypted credentials."""
     connections = await db.scalars(select(ManagerConnection).where(ManagerConnection.tenant_id == UUID(claims["tenant_id"])).order_by(ManagerConnection.created_at.desc()))
     return list(connections)
+
+
+@router.post("/admin/manager-connections/{connection_id}/accounts", status_code=status.HTTP_202_ACCEPTED)
+async def create_external_account(
+    connection_id: UUID,
+    payload: MTAccountCreateSchema,
+    claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Queue account provisioning only when a concrete broker transport is registered."""
+    connection = await db.scalar(select(ManagerConnection).where(ManagerConnection.id == connection_id, ManagerConnection.tenant_id == UUID(claims["tenant_id"]), ManagerConnection.enabled.is_(True)))
+    if not connection:
+        raise HTTPException(status_code=404, detail="Enabled manager connection not found")
+    adapter = MTManagerAdapter(connection.encrypted_password, connection.server)
+    try:
+        return await adapter.create_trading_account(payload)
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 
 
 @router.get("/wallet", response_model=WalletResponse)
