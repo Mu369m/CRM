@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db import get_db
+from .db import get_db, get_redis
 from .crypto import decrypt_field, encrypt_field
-from .models import AuditLog, KycDocument, LedgerEntry, MoneyRequest, Role, TradingAccount, User, Wallet
+from .models import AuditLog, KycDocument, LedgerEntry, MoneyRequest, Role, TenantSettings, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
 from .security import create_access_token, new_totp_secret, require_roles, verify_password, verify_totp
 from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, MoneyRequestResponse, TwoFactorSetupResponse, TwoFactorVerifyRequest, TradingAccountCreate
+from .settings_schemas import TenantSettingsPayload
 
 router = APIRouter(prefix="/api")
 
@@ -123,6 +124,36 @@ async def kyc_queue(claims: dict[str, str] = Depends(require_roles(Role.COMPLIAN
     """List only pending documents in the reviewer's tenant."""
     documents = await db.scalars(select(KycDocument).where(KycDocument.tenant_id == UUID(claims["tenant_id"]), KycDocument.status == "PENDING").order_by(KycDocument.created_at))
     return [{"id": item.id, "user_id": item.user_id, "document_type": item.document_type, "created_at": item.created_at} for item in documents]
+
+
+@router.get("/settings", response_model=TenantSettingsPayload)
+async def tenant_settings(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+    """Return runtime branding/rule settings, preferring the hot Redis snapshot."""
+    cache_key = f"tenant-settings:{claims['tenant_id']}"
+    cached = await redis.get(cache_key)
+    if cached:
+        return TenantSettingsPayload.model_validate_json(cached)
+    settings = await db.get(TenantSettings, UUID(claims["tenant_id"]))
+    if not settings:
+        raise HTTPException(status_code=404, detail="Tenant settings not found")
+    payload = TenantSettingsPayload.model_validate(settings)
+    await redis.set(cache_key, payload.model_dump_json(), ex=300)
+    return payload
+
+
+@router.put("/settings", response_model=TenantSettingsPayload)
+async def update_tenant_settings(payload: TenantSettingsPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+    """Persist tenant configuration and invalidate the hot cache atomically after commit."""
+    settings = await db.get(TenantSettings, UUID(claims["tenant_id"]))
+    if not settings:
+        settings = TenantSettings(tenant_id=UUID(claims["tenant_id"]), **payload.model_dump())
+        db.add(settings)
+    else:
+        for key, value in payload.model_dump().items():
+            setattr(settings, key, value)
+    await db.commit()
+    await redis.delete(f"tenant-settings:{claims['tenant_id']}")
+    return payload
 
 
 @router.get("/wallet", response_model=WalletResponse)

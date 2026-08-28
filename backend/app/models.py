@@ -50,6 +50,12 @@ class AccountPlatform(StrEnum):
     CTRADER = "CTRADER"
 
 
+class RebateStrategy(StrEnum):
+    PER_LOT_FIXED = "PER_LOT_FIXED"
+    PERCENTAGE_SPREAD = "PERCENTAGE_SPREAD"
+    ASSET_BASED = "ASSET_BASED"
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -58,6 +64,7 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
     wallets: Mapped[list["Wallet"]] = relationship(back_populates="tenant")
+    settings: Mapped["TenantSettings | None"] = relationship(back_populates="tenant", uselist=False)
 
 
 class User(Base):
@@ -183,3 +190,57 @@ class IbPartner(Base):
     referral_code: Mapped[str] = mapped_column(String(50), unique=True)
     commission_rate: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=Decimal("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TenantSettings(Base):
+    __tablename__ = "tenant_settings"
+
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    primary_color: Mapped[str] = mapped_column(String(20), default="#45b69c")
+    secondary_color: Mapped[str] = mapped_column(String(20), default="#1d3430")
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favicon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta_title: Mapped[str] = mapped_column(String(160), default="Brokerage CRM")
+    support_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    max_ib_levels: Mapped[int] = mapped_column(default=5)
+    tenant_schema: Mapped[str] = mapped_column(String(80), unique=True)
+    tenant: Mapped[Tenant] = relationship(back_populates="settings")
+
+
+class RebateRule(Base):
+    __tablename__ = "rebate_rules"
+    __table_args__ = (UniqueConstraint("tenant_id", "instrument_group", "level", name="uq_rebate_rule_scope"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    instrument_group: Mapped[str] = mapped_column(String(80))
+    strategy: Mapped[RebateStrategy] = mapped_column()
+    level: Mapped[int] = mapped_column()
+    fixed_per_lot: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    spread_percentage: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"))
+    asset_class: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class KycRequirement(Base):
+    __tablename__ = "kyc_requirements"
+    __table_args__ = (UniqueConstraint("tenant_id", "document_type", name="uq_kyc_requirement_type"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    document_type: Mapped[str] = mapped_column(String(50))
+    required: Mapped[bool] = mapped_column(default=True)
+    applies_to_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class BonusRule(Base):
+    __tablename__ = "bonus_rules"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    deposit_percentage: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"))
+    max_credit: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    withdrawal_lot_target: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    enabled: Mapped[bool] = mapped_column(default=True)

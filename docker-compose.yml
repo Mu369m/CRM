@@ -5,7 +5,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://crm:crm_local_only@postgres:5432/brokerage_crm
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: local-development-jwt-secret-change-me
-      FIELD_ENCRYPTION_KEY: c2VjdXJlLWxvY2FsLWtleS1mb3ItY3JtLWFwcC0zMiE=
+      FIELD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       WEBHOOK_SIGNING_SECRET: local-webhook-secret-change-me
     ports: ["8000:8000"]
     depends_on:

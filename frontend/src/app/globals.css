@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { --ink: #172923; --muted: #72817c; --line: #e3e9e5; --paper: #f7faf8; --mint: #45b69c; --navy: #1d3430; }
+:root { --ink: #172923; --muted: #72817c; --line: #e3e9e5; --paper: #f7faf8; --mint: var(--tenant-primary, #45b69c); --navy: var(--tenant-secondary, #1d3430); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Georgia, "Times New Roman", serif; }
 button { font: inherit; cursor: pointer; }
