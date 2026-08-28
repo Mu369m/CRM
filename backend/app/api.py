@@ -99,10 +99,14 @@ async def submit_kyc(payload: KycSubmission, claims: dict[str, str] = Depends(re
 @router.post("/kyc/documents/{document_id}/review")
 async def review_kyc(document_id: UUID, payload: KycReview, claims: dict[str, str] = Depends(require_roles(Role.COMPLIANCE, Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_tenant_db)):
     """Review only documents inside the caller's tenant and record the decision."""
-    document = await db.scalar(select(KycDocument).where(KycDocument.id == document_id, KycDocument.tenant_id == UUID(claims["tenant_id"])))
+    document = await db.scalar(select(KycDocument).where(KycDocument.id == document_id, KycDocument.tenant_id == UUID(claims["tenant_id"])).with_for_update())
     if not document:
         raise HTTPException(status_code=404, detail="KYC document not found")
     document.status, document.review_note = payload.status, payload.reason
+    document.reviewed_at = func.now()
+    user = await db.scalar(select(User).where(User.id == document.user_id, User.tenant_id == document.tenant_id).with_for_update())
+    user.kyc_status = payload.status
+    user.is_kyc_verified = payload.status == "APPROVED"
     await db.commit()
     return {"id": document.id, "status": document.status}
 

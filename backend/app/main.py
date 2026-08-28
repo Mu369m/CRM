@@ -13,6 +13,10 @@ from .api_byodb import router as byodb_router
 from .api.v1.owner.system_control import router as system_control_router
 from .api.v1.broker.settings import router as broker_settings_router
 from .api.v1.trader.accounts import router as trader_accounts_router
+from .api.v1.trader.dashboard import router as trader_dashboard_router
+from .api.v1.trader.profile import router as trader_profile_router
+from .api.v1.trader.kyc import router as trader_kyc_router
+from .api.v1.trader.ib import router as trader_ib_router
 from .api.v1.broker.finance import router as finance_router
 from .api.v1.broker.risk import router as risk_router
 
@@ -40,6 +44,10 @@ app.include_router(byodb_router)
 app.include_router(system_control_router)
 app.include_router(broker_settings_router)
 app.include_router(trader_accounts_router)
+app.include_router(trader_dashboard_router)
+app.include_router(trader_profile_router)
+app.include_router(trader_kyc_router)
+app.include_router(trader_ib_router)
 app.include_router(finance_router)
 app.include_router(risk_router)
 

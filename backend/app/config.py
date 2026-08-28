@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     field_encryption_key: SecretStr
     webhook_signing_secret: SecretStr
     cors_origins: list[str] = ["http://localhost:3000"]
+    kyc_upload_base_url: str | None = None
 
 
 @lru_cache

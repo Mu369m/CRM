@@ -9,7 +9,8 @@ const primary = [
   { label: "Trading", href: "/trader-cabinet", icon: BarChart3 },
   { label: "Wallet", href: "/trader-cabinet#wallet", icon: WalletCards },
   { label: "Approvals", href: "/trader-cabinet#approvals", icon: Bell },
-  { label: "Profile", href: "/settings", icon: UserRound },
+  { label: "Profile", href: "/trader/profile", icon: UserRound },
+  { label: "IB Partner", href: "/trader/ib", icon: BarChart3 },
 ];
 
 export default function MainLayout({ children }: { children: ReactNode }) {

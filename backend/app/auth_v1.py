@@ -2,13 +2,13 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
-from .models import Role, Tenant, User
+from .models import IbPartner, Role, Tenant, User
 from .security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -18,6 +18,9 @@ class RegisterSchema(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
     parent_ib_id: UUID | None = None
+    full_name: str | None = Field(default=None, max_length=160)
+    phone: str | None = Field(default=None, max_length=40)
+    country: str | None = Field(default=None, min_length=2, max_length=2, pattern=r"^[A-Z]{2}$")
 
 
 class LoginSchema(BaseModel):
@@ -27,23 +30,27 @@ class LoginSchema(BaseModel):
 
 async def get_current_tenant(
     x_tenant_id: str | None = Header(default=None),
+    x_tenant_host: str | None = Header(default=None, alias="X-Tenant-Host"),
     db: AsyncSession = Depends(get_db),
 ) -> Tenant:
-    """Resolve an active tenant from a UUID header without accepting arbitrary identifiers."""
-    if not x_tenant_id:
-        raise HTTPException(status_code=400, detail="X-Tenant-ID header missing")
-    try:
-        tenant_id = UUID(x_tenant_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail="X-Tenant-ID must be a valid UUID") from error
-    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
+    """Resolve an active tenant from its verified host or UUID header."""
+    host = (x_tenant_host or "").split(":", 1)[0].lower()
+    tenant = None
+    if host:
+        tenant = await db.scalar(select(Tenant).where(Tenant.is_active.is_(True), (Tenant.subdomain == host) | (Tenant.custom_domain == host)))
+    if not tenant and x_tenant_id:
+        try:
+            tenant_id = UUID(x_tenant_id)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail="Tenant identity must be a valid UUID") from error
+        tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
     if not tenant:
-        raise HTTPException(status_code=403, detail="Tenant invalid or inactive")
+        raise HTTPException(status_code=400, detail="Tenant host or identity is required")
     return tenant
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(data: RegisterSchema, tenant: Tenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)):
+async def register(data: RegisterSchema, ref: str | None = Query(default=None, max_length=50), tenant: Tenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)):
     """Register a trader inside one tenant and hash the password with Argon2id."""
     existing = await db.scalar(select(User).where(User.email == data.email.lower(), User.tenant_id == tenant.id))
     if existing:
@@ -52,7 +59,13 @@ async def register(data: RegisterSchema, tenant: Tenant = Depends(get_current_te
         parent = await db.scalar(select(User).where(User.id == data.parent_ib_id, User.tenant_id == tenant.id, User.role == Role.IB_PARTNER))
         if not parent:
             raise HTTPException(status_code=400, detail="Parent IB is invalid for this tenant")
-    user = User(tenant_id=tenant.id, email=data.email.lower(), password_hash=hash_password(data.password), role=Role.TRADER, parent_ib_id=data.parent_ib_id)
+    parent_ib_id = data.parent_ib_id
+    if ref:
+        partner = await db.scalar(select(IbPartner).where(IbPartner.tenant_id == tenant.id, IbPartner.referral_code == ref))
+        if not partner:
+            raise HTTPException(status_code=400, detail="Referral code is invalid")
+        parent_ib_id = partner.user_id
+    user = User(tenant_id=tenant.id, email=data.email.lower(), full_name=data.full_name, phone=data.phone, country=data.country, password_hash=hash_password(data.password), role=Role.TRADER, parent_ib_id=parent_ib_id)
     db.add(user)
     await db.commit()
     await db.refresh(user)
