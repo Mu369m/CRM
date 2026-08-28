@@ -11,6 +11,8 @@ from .webhooks import router as webhook_router
 from .auth_v1 import router as auth_v1_router
 from .api_byodb import router as byodb_router
 from .api.v1.owner.system_control import router as system_control_router
+from .api.v1.broker.settings import router as broker_settings_router
+from .api.v1.trader.accounts import router as trader_accounts_router
 
 settings = get_settings()
 
@@ -27,13 +29,15 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Tenant-Host"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Tenant-Host", "X-Tenant-ID"],
 )
 app.include_router(api_router)
 app.include_router(webhook_router)
 app.include_router(auth_v1_router)
 app.include_router(byodb_router)
 app.include_router(system_control_router)
+app.include_router(broker_settings_router)
+app.include_router(trader_accounts_router)
 
 
 @app.get("/health", tags=["system"])

@@ -91,8 +91,12 @@ export default function InterfaceCustomizer({ scope = "admin", initialConfig, on
     setStatus("Publishing...");
     const host = window.location.hostname;
     window.localStorage.setItem(`interface-customizer:${host}`, JSON.stringify(config));
-    onPublish?.(config);
     const token = window.localStorage.getItem("access_token");
+    const broadcast = () => {
+      const channel = "BroadcastChannel" in window ? new BroadcastChannel("tenant-theme") : null;
+      channel?.postMessage({ type: "theme_updated", branding: { companyName: config.appName, primaryColor: config.primaryColor, secondaryColor: "#1d3430", logoUrl: config.logoUrl || undefined, faviconUrl: config.faviconUrl || undefined, metaTitle: config.appName } });
+      channel?.close();
+    };
     try {
       if (token) {
         const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -102,6 +106,8 @@ export default function InterfaceCustomizer({ scope = "admin", initialConfig, on
         const response = await fetch(`${api}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...current, primary_color: config.primaryColor, logo_url: config.logoUrl || null, favicon_url: config.faviconUrl || null, meta_title: config.appName }) });
         if (!response.ok) throw new Error("Branding API rejected the changes");
       }
+      onPublish?.(config);
+      broadcast();
       setStatus(token ? "Published live" : "Saved on this device");
     } catch (error) {
       setStatus(error instanceof Error ? `${error.message}; local preview saved` : "Local preview saved");

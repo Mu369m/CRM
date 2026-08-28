@@ -6,7 +6,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -173,6 +173,7 @@ class TradingAccount(Base):
     is_demo: Mapped[bool] = mapped_column(default=False)
     leverage: Mapped[int] = mapped_column(default=100)
     is_locked: Mapped[bool] = mapped_column(default=False)
+    provisioning_status: Mapped[str] = mapped_column(String(20), default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -217,6 +218,7 @@ class TenantSettings(Base):
     support_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     max_ib_levels: Mapped[int] = mapped_column(default=5)
     tenant_schema: Mapped[str] = mapped_column(String(80), unique=True)
+    kyc_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
     tenant: Mapped[Tenant] = relationship(back_populates="settings")
 
 

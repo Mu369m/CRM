@@ -37,6 +37,7 @@ CREATE TABLE trading_accounts (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, platform account_platform NOT NULL,
   external_login VARCHAR(80) NOT NULL, server VARCHAR(160) NOT NULL, is_demo BOOLEAN NOT NULL DEFAULT false,
   leverage INTEGER NOT NULL DEFAULT 100 CHECK (leverage BETWEEN 1 AND 2000), is_locked BOOLEAN NOT NULL DEFAULT false,
+  provisioning_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(platform, external_login, server)
 );
 CREATE TABLE money_requests (
@@ -45,6 +46,13 @@ CREATE TABLE money_requests (
   amount NUMERIC(20,8) NOT NULL CHECK (amount > 0), currency CHAR(3) NOT NULL,
   status request_status NOT NULL DEFAULT 'PENDING', provider_reference VARCHAR(160), idempotency_key VARCHAR(120) NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), reviewed_at TIMESTAMPTZ
+);
+CREATE TABLE tenant_settings (
+  tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  primary_color VARCHAR(20) NOT NULL DEFAULT '#45b69c', secondary_color VARCHAR(20) NOT NULL DEFAULT '#1d3430',
+  logo_url TEXT, favicon_url TEXT, meta_title VARCHAR(160) NOT NULL DEFAULT 'Brokerage CRM', support_email VARCHAR(320),
+  max_ib_levels INTEGER NOT NULL DEFAULT 5, tenant_schema VARCHAR(80) NOT NULL UNIQUE,
+  kyc_schema JSONB NOT NULL DEFAULT '{}'
 );
 CREATE TABLE ib_partners (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

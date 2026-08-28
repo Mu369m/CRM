@@ -28,6 +28,26 @@ export default function TraderCabinet() {
   const [modal, setModal] = useState<ModalKind>(null);
   const [amount, setAmount] = useState("");
   const [notice, setNotice] = useState("");
+  const [requestingAccount, setRequestingAccount] = useState(false);
+
+  async function requestAccount(platform: "MT4" | "MT5", isDemo = false) {
+    setRequestingAccount(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/trader/trading-accounts/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`, "X-Tenant-Host": window.location.hostname },
+        body: JSON.stringify({ platform, is_demo: isDemo, leverage: 100 }),
+      });
+      const data = await response.json().catch(() => ({})) as { detail?: string; provisioning_status?: string };
+      if (!response.ok) throw new Error(data.detail ?? "Account request failed.");
+      setNotice(`${platform} ${isDemo ? "demo" : "live"} account request queued (${data.provisioning_status ?? "PENDING"}).`);
+      setModal(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to request trading account.");
+    } finally {
+      setRequestingAccount(false);
+    }
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -55,7 +75,7 @@ export default function TraderCabinet() {
           <section className="quick-section"><div className="section-heading"><div><p className="cabinet-eyebrow">Shortcuts</p><h2>Quick actions</h2></div></div><div className="quick-grid"><button onClick={() => setModal("deposit")}><span className="quick-icon deposit-icon">＋</span><span><strong>Make a deposit</strong><small>Fund your wallet securely</small></span><b>›</b></button><button onClick={() => setModal("withdraw")}><span className="quick-icon withdraw-icon">↗</span><span><strong>Request withdrawal</strong><small>Send funds to your account</small></span><b>›</b></button><button><span className="quick-icon report-icon">▤</span><span><strong>View performance</strong><small>Review your trading history</small></span><b>›</b></button></div></section>
         </section>
       </div>
-      {modal && <div className="modal-backdrop" role="presentation" onClick={() => setModal(null)}><div className="cabinet-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setModal(null)}>×</button><p className="cabinet-eyebrow">{modal === "account" ? "Account engine" : "Wallet & treasury"}</p><h2>{modal === "account" ? "Create a live account" : modal === "deposit" ? "Make a deposit" : "Request withdrawal"}</h2>{modal === "account" ? <div className="modal-options"><button onClick={() => { setNotice("Live account request submitted for approval."); setModal(null); }}>MT5 Live <small>Standard execution account</small></button><button onClick={() => { setNotice("MT4 live account request submitted for approval."); setModal(null); }}>MT4 Live <small>Classic execution account</small></button></div> : <form onSubmit={submit}><label>Amount (USD)<input autoFocus inputMode="decimal" min="1" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" required /></label><button className="primary-action modal-submit" type="submit">{modal === "deposit" ? "Continue to deposit" : "Submit withdrawal"}</button></form>}</div></div>}
+      {modal && <div className="modal-backdrop" role="presentation" onClick={() => setModal(null)}><div className="cabinet-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setModal(null)}>×</button><p className="cabinet-eyebrow">{modal === "account" ? "Account engine" : "Wallet & treasury"}</p><h2>{modal === "account" ? "Create a live account" : modal === "deposit" ? "Make a deposit" : "Request withdrawal"}</h2>{modal === "account" ? <div className="modal-options"><button disabled={requestingAccount} onClick={() => void requestAccount("MT5")}>MT5 Live <small>Standard execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT4")}>MT4 Live <small>Classic execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT5", true)}>MT5 Demo <small>Practice execution account</small></button></div> : <form onSubmit={submit}><label>Amount (USD)<input autoFocus inputMode="decimal" min="1" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" required /></label><button className="primary-action modal-submit" type="submit">{modal === "deposit" ? "Continue to deposit" : "Submit withdrawal"}</button></form>}</div></div>}
     </main></MainLayout>
   );
 }
