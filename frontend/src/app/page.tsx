@@ -26,7 +26,7 @@ export default function Home() {
         <div className="brand"><span className="brand-mark">N</span><span>northstar<span className="brand-dot">.</span></span></div>
         <div className="workspace"><span className="status-dot" /> Northstar Markets <span className="chevron">⌄</span></div>
         <p className="nav-label">Workspace</p>
-        <nav>{navItems.map((item, index) => <button className={active === item ? "nav-item active" : "nav-item"} onClick={() => setActive(item)} key={item}><span className="nav-icon">{["◈", "◌", "↕", "✓", "⌁"][index]}</span>{item}{item === "Compliance" && <span className="nav-count">24</span>}</button>)}</nav>
+        <nav>{navItems.map((item, index) => item === "Clients" ? <a className="nav-item" href="/trader-cabinet" key={item}><span className="nav-icon">◌</span>Trader Cabinet</a> : <button className={active === item ? "nav-item active" : "nav-item"} onClick={() => setActive(item)} key={item}><span className="nav-icon">{["◈", "◌", "↕", "✓", "⌁"][index]}</span>{item}{item === "Compliance" && <span className="nav-count">24</span>}</button>)}</nav>
         <p className="nav-label lower">Manage</p>
         <nav><button className="nav-item"><span className="nav-icon">◫</span>Trading accounts</button><a className="nav-item" href="/settings"><span className="nav-icon">⚙</span>Settings</a></nav>
         <div className="sidebar-bottom"><div className="user-avatar">RK</div><div><strong>Rayan Khan</strong><small>Super administrator</small></div><span className="more">•••</span></div>
