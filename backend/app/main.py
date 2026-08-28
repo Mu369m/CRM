@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start market-data/risk loops and stop them cleanly during shutdown."""
+    if os.getenv("RUN_BACKGROUND_WORKERS", "false").lower() != "true":
+        yield
+        return
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     price_streamer = PriceStreamer(SessionFactory, redis)
     risk_executor = RiskExecutor(SessionFactory, redis)
