@@ -24,11 +24,13 @@ const accounts: Account[] = [
 
 export default function TraderCabinet() {
   const { branding } = useTenant();
-  const [balance, setBalance] = useState(12500);
+  const balance = 12500;
   const [modal, setModal] = useState<ModalKind>(null);
   const [amount, setAmount] = useState("");
   const [notice, setNotice] = useState("");
   const [requestingAccount, setRequestingAccount] = useState(false);
+  const [paymentProofUrl, setPaymentProofUrl] = useState("");
+  const [submittingFinance, setSubmittingFinance] = useState(false);
 
   async function requestAccount(platform: "MT4" | "MT5", isDemo = false) {
     setRequestingAccount(true);
@@ -49,15 +51,22 @@ export default function TraderCabinet() {
     }
   }
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) return;
-    if (modal === "deposit") setBalance((current) => current + value);
-    if (modal === "withdraw" && value <= balance) setBalance((current) => current - value);
-    setNotice(modal === "withdraw" && value > balance ? "Insufficient available balance." : "Request submitted for review.");
-    setAmount("");
-    if (!(modal === "withdraw" && value > balance)) setModal(null);
+    if (!Number.isFinite(value) || value <= 0 || (modal !== "deposit" && modal !== "withdraw")) return;
+    setSubmittingFinance(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/trader/finance/request`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`, "X-Tenant-Host": window.location.hostname }, body: JSON.stringify({ type: modal === "deposit" ? "DEPOSIT" : "WITHDRAWAL", amount: value, currency: "USD", payment_proof_url: paymentProofUrl.trim() || null }) });
+      const data = await response.json().catch(() => ({})) as { detail?: string };
+      if (!response.ok) throw new Error(data.detail ?? "Transaction request failed.");
+      setNotice(`${modal === "deposit" ? "Deposit" : "Withdrawal"} request submitted for finance approval.`);
+      setAmount(""); setPaymentProofUrl(""); setModal(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to submit transaction request.");
+    } finally {
+      setSubmittingFinance(false);
+    }
   }
 
   return (
@@ -75,7 +84,7 @@ export default function TraderCabinet() {
           <section className="quick-section"><div className="section-heading"><div><p className="cabinet-eyebrow">Shortcuts</p><h2>Quick actions</h2></div></div><div className="quick-grid"><button onClick={() => setModal("deposit")}><span className="quick-icon deposit-icon">＋</span><span><strong>Make a deposit</strong><small>Fund your wallet securely</small></span><b>›</b></button><button onClick={() => setModal("withdraw")}><span className="quick-icon withdraw-icon">↗</span><span><strong>Request withdrawal</strong><small>Send funds to your account</small></span><b>›</b></button><button><span className="quick-icon report-icon">▤</span><span><strong>View performance</strong><small>Review your trading history</small></span><b>›</b></button></div></section>
         </section>
       </div>
-      {modal && <div className="modal-backdrop" role="presentation" onClick={() => setModal(null)}><div className="cabinet-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setModal(null)}>×</button><p className="cabinet-eyebrow">{modal === "account" ? "Account engine" : "Wallet & treasury"}</p><h2>{modal === "account" ? "Create a live account" : modal === "deposit" ? "Make a deposit" : "Request withdrawal"}</h2>{modal === "account" ? <div className="modal-options"><button disabled={requestingAccount} onClick={() => void requestAccount("MT5")}>MT5 Live <small>Standard execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT4")}>MT4 Live <small>Classic execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT5", true)}>MT5 Demo <small>Practice execution account</small></button></div> : <form onSubmit={submit}><label>Amount (USD)<input autoFocus inputMode="decimal" min="1" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" required /></label><button className="primary-action modal-submit" type="submit">{modal === "deposit" ? "Continue to deposit" : "Submit withdrawal"}</button></form>}</div></div>}
+      {modal && <div className="modal-backdrop" role="presentation" onClick={() => setModal(null)}><div className="cabinet-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setModal(null)}>×</button><p className="cabinet-eyebrow">{modal === "account" ? "Account engine" : "Wallet & treasury"}</p><h2>{modal === "account" ? "Create a live account" : modal === "deposit" ? "Make a deposit" : "Request withdrawal"}</h2>{modal === "account" ? <div className="modal-options"><button disabled={requestingAccount} onClick={() => void requestAccount("MT5")}>MT5 Live <small>Standard execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT4")}>MT4 Live <small>Classic execution account</small></button><button disabled={requestingAccount} onClick={() => void requestAccount("MT5", true)}>MT5 Demo <small>Practice execution account</small></button></div> : <form onSubmit={(event) => void submit(event)}><label>Amount (USD)<input autoFocus inputMode="decimal" min="1" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" required /></label>{modal === "deposit" && <label>Payment proof URL<input type="url" value={paymentProofUrl} onChange={(event) => setPaymentProofUrl(event.target.value)} placeholder="https://.../receipt.png" /></label>}<button className="primary-action modal-submit" disabled={submittingFinance} type="submit">{submittingFinance ? "Submitting..." : modal === "deposit" ? "Submit deposit request" : "Submit withdrawal request"}</button></form>}</div></div>}
     </main></MainLayout>
   );
 }

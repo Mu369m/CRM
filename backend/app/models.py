@@ -46,6 +46,24 @@ class RequestStatus(StrEnum):
     COMPLETED = "COMPLETED"
 
 
+class TransactionType(StrEnum):
+    DEPOSIT = "DEPOSIT"
+    WITHDRAWAL = "WITHDRAWAL"
+    INTERNAL_TRANSFER = "INTERNAL_TRANSFER"
+
+
+class TransactionStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class PaymentGatewayType(StrEnum):
+    CRYPTO = "CRYPTO"
+    BANK_WIRE = "BANK_WIRE"
+    LOCAL = "LOCAL"
+
+
 class AccountPlatform(StrEnum):
     MT4 = "MT4"
     MT5 = "MT5"
@@ -192,6 +210,34 @@ class MoneyRequest(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PaymentGateway(Base):
+    __tablename__ = "payment_gateways"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_payment_gateway_tenant_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    type: Mapped[PaymentGatewayType] = mapped_column()
+    is_active: Mapped[bool] = mapped_column(default=True)
+    config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    trader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type: Mapped[TransactionType] = mapped_column()
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 8))
+    currency: Mapped[str] = mapped_column(String(3))
+    status: Mapped[TransactionStatus] = mapped_column(default=TransactionStatus.PENDING, index=True)
+    gateway_id: Mapped[UUID | None] = mapped_column(ForeignKey("payment_gateways.id", ondelete="SET NULL"), nullable=True)
+    payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class IbPartner(Base):

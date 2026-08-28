@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....db import get_db
-from ....models import AccountPlatform, Role, TradingAccount, User, Wallet
+from ....models import AccountPlatform, Role, TradingAccount, Wallet
 from ....security import require_roles
 
 router = APIRouter(prefix="/api/v1", tags=["Trading Accounts"])

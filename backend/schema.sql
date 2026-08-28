@@ -47,6 +47,18 @@ CREATE TABLE money_requests (
   status request_status NOT NULL DEFAULT 'PENDING', provider_reference VARCHAR(160), idempotency_key VARCHAR(120) NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), reviewed_at TIMESTAMPTZ
 );
+CREATE TABLE payment_gateways (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name VARCHAR(120) NOT NULL, type VARCHAR(20) NOT NULL, is_active BOOLEAN NOT NULL DEFAULT true,
+  config_json JSONB NOT NULL DEFAULT '{}', UNIQUE(tenant_id, name)
+);
+CREATE TABLE transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  trader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, type VARCHAR(30) NOT NULL,
+  amount NUMERIC(20,8) NOT NULL CHECK (amount > 0), currency CHAR(3) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING', gateway_id UUID REFERENCES payment_gateways(id) ON DELETE SET NULL,
+  payment_proof_url TEXT, rejection_note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE tenant_settings (
   tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
   primary_color VARCHAR(20) NOT NULL DEFAULT '#45b69c', secondary_color VARCHAR(20) NOT NULL DEFAULT '#1d3430',
@@ -71,5 +83,6 @@ CREATE TABLE audit_logs (
 );
 CREATE INDEX idx_documents_review_queue ON kyc_documents(tenant_id, status, created_at);
 CREATE INDEX idx_money_requests_queue ON money_requests(tenant_id, status, created_at);
+CREATE INDEX idx_transactions_queue ON transactions(tenant_id, status, created_at);
 CREATE INDEX idx_ib_parent ON ib_partners(tenant_id, parent_id);
 CREATE INDEX idx_audit_timeline ON audit_logs(tenant_id, created_at DESC);
