@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
+import pyotp
 from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -26,6 +27,16 @@ def verify_password(password: str, encoded: str) -> bool:
         return _hasher.verify(encoded, password)
     except Exception:
         return False
+
+
+def new_totp_secret() -> str:
+    """Create a per-user secret; persist it encrypted and never log it."""
+    return pyotp.random_base32()
+
+
+def verify_totp(secret: str, code: str) -> bool:
+    """Accept only the current time window, with format validation delegated to pyotp."""
+    return pyotp.TOTP(secret).verify(code, valid_window=1)
 
 
 def create_access_token(user_id: UUID, tenant_id: UUID, role: Role) -> str:
