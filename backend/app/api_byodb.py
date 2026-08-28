@@ -14,6 +14,7 @@ from .models.master import BrokerTenant
 from .security import require_roles
 from .core.db_router import invalidate_tenant_engine, validate_database_url
 from .core.tenant_migrations import migrate_tenant_database
+from .core.cloud_provisioner import create_digitalocean_postgres
 
 router = APIRouter(prefix="/api/v1/admin/settings", tags=["BYODB"])
 
@@ -51,3 +52,41 @@ async def configure_private_database(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Private database setup failed") from error
     finally:
         await test_engine.dispose()
+
+
+@router.post("/database/auto-provision", response_model=TenantDatabaseResponse)
+async def auto_provision_private_database(
+    claims: dict[str, str] = Depends(require_roles(Role.BROKER_ADMIN, Role.SUPER_ADMIN)),
+    master_db: AsyncSession = Depends(get_db),
+) -> TenantDatabaseResponse:
+    """Provision a DigitalOcean database and complete BYODB onboarding for the tenant."""
+    try:
+        tenant_id = UUID(claims["tenant_id"])
+    except (KeyError, ValueError) as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid tenant identity") from error
+
+    broker = await master_db.get(BrokerTenant, tenant_id)
+    if not broker or not broker.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found or inactive")
+
+    try:
+        database_url = validate_database_url(await create_digitalocean_postgres(broker.subdomain))
+        test_engine = create_async_engine(database_url, pool_pre_ping=True, pool_size=1, max_overflow=0)
+        try:
+            async with test_engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+            await migrate_tenant_database(database_url)
+            broker.encrypted_db_url = encrypt_field(database_url)
+            await master_db.commit()
+            await invalidate_tenant_engine(tenant_id)
+            return TenantDatabaseResponse(tenant_id=tenant_id, configured=True, migrated=True)
+        finally:
+            await test_engine.dispose()
+    except HTTPException:
+        raise
+    except Exception as error:
+        await master_db.rollback()
+        import logging
+
+        logging.getLogger(__name__).exception("Automatic private database setup failed", exc_info=error)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Automatic database setup failed") from error

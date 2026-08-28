@@ -12,5 +12,6 @@ pyotp==2.9.0
 PyJWT[crypto]==2.10.1
 python-multipart==0.0.20
 email-validator==2.2.0
+httpx==0.28.1
 pytest==8.4.1
 pytest-asyncio==1.1.0
