@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db, get_redis
 from .crypto import decrypt_field, encrypt_field
-from .models import AuditLog, KycDocument, LedgerEntry, MoneyRequest, Role, TenantSettings, TradingAccount, User, Wallet
+from .models import AuditLog, BonusRule, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, TenantSettings, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
 from .security import create_access_token, new_totp_secret, require_roles, verify_password, verify_totp
 from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, MoneyRequestResponse, TwoFactorSetupResponse, TwoFactorVerifyRequest, TradingAccountCreate
 from .settings_schemas import TenantSettingsPayload
+from .admin_schemas import BonusRulePayload, KycRequirementPayload, ManagerConnectionPayload, ManagerConnectionResponse, RebateRulePayload
 
 router = APIRouter(prefix="/api")
 
@@ -154,6 +155,66 @@ async def update_tenant_settings(payload: TenantSettingsPayload, claims: dict[st
     await db.commit()
     await redis.delete(f"tenant-settings:{claims['tenant_id']}")
     return payload
+
+
+@router.put("/admin/rebate-rules", response_model=RebateRulePayload)
+async def upsert_rebate_rule(payload: RebateRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+    """Upsert a runtime rebate rule within the authenticated tenant boundary."""
+    tenant_id = UUID(claims["tenant_id"])
+    rule = await db.scalar(select(RebateRule).where(RebateRule.tenant_id == tenant_id, RebateRule.instrument_group == payload.instrument_group, RebateRule.level == payload.level))
+    if rule:
+        for key, value in payload.model_dump().items():
+            setattr(rule, key, value)
+    else:
+        db.add(RebateRule(tenant_id=tenant_id, **payload.model_dump()))
+    await db.commit()
+    return payload
+
+
+@router.get("/admin/rebate-rules", response_model=list[RebateRulePayload])
+async def list_rebate_rules(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.SALES)), db: AsyncSession = Depends(get_db)):
+    """List tenant rebate rules for review and partner operations."""
+    rules = await db.scalars(select(RebateRule).where(RebateRule.tenant_id == UUID(claims["tenant_id"])).order_by(RebateRule.level, RebateRule.instrument_group))
+    return list(rules)
+
+
+@router.put("/admin/kyc-requirements", response_model=KycRequirementPayload)
+async def upsert_kyc_requirement(payload: KycRequirementPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.COMPLIANCE)), db: AsyncSession = Depends(get_db)):
+    """Upsert a country-aware KYC document requirement."""
+    tenant_id = UUID(claims["tenant_id"])
+    requirement = await db.scalar(select(KycRequirement).where(KycRequirement.tenant_id == tenant_id, KycRequirement.document_type == payload.document_type))
+    if requirement:
+        for key, value in payload.model_dump().items():
+            setattr(requirement, key, value)
+    else:
+        db.add(KycRequirement(tenant_id=tenant_id, **payload.model_dump()))
+    await db.commit()
+    return payload
+
+
+@router.put("/admin/bonus-rules", response_model=BonusRulePayload)
+async def upsert_bonus_rule(payload: BonusRulePayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_db)):
+    """Upsert deposit bonus and withdrawal volume target rules."""
+    db.add(BonusRule(tenant_id=UUID(claims["tenant_id"]), **payload.model_dump()))
+    await db.commit()
+    return payload
+
+
+@router.post("/admin/manager-connections", response_model=ManagerConnectionResponse)
+async def create_manager_connection(payload: ManagerConnectionPayload, claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN)), db: AsyncSession = Depends(get_db)):
+    """Store provider credentials encrypted; only normalized metadata leaves the API."""
+    connection = ManagerConnection(tenant_id=UUID(claims["tenant_id"]), platform=payload.platform, name=payload.name, server=payload.server, login=payload.login, encrypted_password=encrypt_field(payload.password), enabled=payload.enabled)
+    db.add(connection)
+    await db.commit()
+    await db.refresh(connection)
+    return connection
+
+
+@router.get("/admin/manager-connections", response_model=list[ManagerConnectionResponse])
+async def list_manager_connections(claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.FINANCE)), db: AsyncSession = Depends(get_db)):
+    """List manager metadata without exposing encrypted credentials."""
+    connections = await db.scalars(select(ManagerConnection).where(ManagerConnection.tenant_id == UUID(claims["tenant_id"])).order_by(ManagerConnection.created_at.desc()))
+    return list(connections)
 
 
 @router.get("/wallet", response_model=WalletResponse)

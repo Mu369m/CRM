@@ -28,7 +28,7 @@ export default function Home() {
         <p className="nav-label">Workspace</p>
         <nav>{navItems.map((item, index) => <button className={active === item ? "nav-item active" : "nav-item"} onClick={() => setActive(item)} key={item}><span className="nav-icon">{["◈", "◌", "↕", "✓", "⌁"][index]}</span>{item}{item === "Compliance" && <span className="nav-count">24</span>}</button>)}</nav>
         <p className="nav-label lower">Manage</p>
-        <nav><button className="nav-item"><span className="nav-icon">◫</span>Trading accounts</button><button className="nav-item"><span className="nav-icon">⚙</span>Settings</button></nav>
+        <nav><button className="nav-item"><span className="nav-icon">◫</span>Trading accounts</button><a className="nav-item" href="/settings"><span className="nav-icon">⚙</span>Settings</a></nav>
         <div className="sidebar-bottom"><div className="user-avatar">RK</div><div><strong>Rayan Khan</strong><small>Super administrator</small></div><span className="more">•••</span></div>
       </aside>
 

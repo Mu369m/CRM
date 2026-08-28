@@ -244,3 +244,18 @@ class BonusRule(Base):
     max_credit: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     withdrawal_lot_target: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class ManagerConnection(Base):
+    __tablename__ = "manager_connections"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_manager_connection_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    platform: Mapped[AccountPlatform] = mapped_column()
+    name: Mapped[str] = mapped_column(String(100))
+    server: Mapped[str] = mapped_column(String(160))
+    login: Mapped[str] = mapped_column(String(100))
+    encrypted_password: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
