@@ -35,6 +35,27 @@ export interface ApiError {
   detail: string;
 }
 
+async function parseApiResponse(response: Response): Promise<unknown> {
+  const rawText = await response.text();
+  if (!rawText.trim()) return {};
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const looksLikeJson = contentType.includes("application/json") || rawText.trim().startsWith("{") || rawText.trim().startsWith("[");
+
+  if (!looksLikeJson) {
+    if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
+      throw new Error("API unavailable: the backend returned an HTML page instead of JSON.");
+    }
+    throw new Error(rawText.trim() || response.statusText || "Request failed.");
+  }
+
+  try {
+    return JSON.parse(rawText) as unknown;
+  } catch {
+    throw new Error("API unavailable: the server response was not valid JSON.");
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = typeof window === "undefined" ? "" : localStorage.getItem("access_token") ?? "";
   const tenantHost = typeof window === "undefined" ? "" : window.location.hostname;
@@ -42,11 +63,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(tenantHost ? { "X-Tenant-Host": tenantHost } : {}), ...init.headers },
   });
-  if (!response.ok) {
-    const error = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiError;
-    throw new Error(error.detail);
+
+  try {
+    const payload = await parseApiResponse(response);
+    if (!response.ok) {
+      const error = payload as Partial<ApiError>;
+      throw new Error(error.detail ?? error.message ?? response.statusText || "Request failed.");
+    }
+    return payload as T;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Request failed.");
   }
-  return response.json() as Promise<T>;
 }
 
 export const crmApi = {
