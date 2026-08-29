@@ -26,20 +26,45 @@
   --button-border: #334155;
   --mint: var(--tenant-primary, #45b69c);
   --navy: var(--tenant-secondary, #0D121F);
+  --accent: #22d3ee;
+  --accent-strong: #14b8a6;
+  --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.08);
   color-scheme: dark;
 }
 html.light {
-  --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --paper: #f4f7fb;
-  --panel: #ffffff;
-  --surface: #f8fafc;
-  --button-bg: #f8fafc;
-  --button-text: #0f172a;
-  --button-border: #cbd5e1;
-  --mint: var(--tenant-primary, #14b8a6);
-  --navy: var(--tenant-secondary, #e0f2fe);
+  --bg-app: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --btn-primary-bg: #2563EB;
+  --btn-primary-hover: #1D4ED8;
+  --btn-primary-text: #FFFFFF;
+  --btn-secondary-bg: #F1F5F9;
+  --btn-secondary-text: #1E293B;
+  --badge-success-bg: #DCFCE7;
+  --badge-success-text: #15803D;
+  --badge-warning-bg: #FEF3C7;
+  --badge-warning-text: #B45309;
+  --badge-danger-bg: #FEE2E2;
+  --badge-danger-text: #B91C1C;
+
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --line: var(--border-subtle);
+  --paper: var(--bg-app);
+  --panel: var(--bg-card);
+  --surface: var(--btn-secondary-bg);
+  --button-bg: var(--btn-secondary-bg);
+  --button-text: var(--btn-secondary-text);
+  --button-border: var(--border-strong);
+  --mint: var(--btn-primary-bg);
+  --navy: var(--bg-card);
+  --accent: var(--btn-primary-bg);
+  --accent-strong: var(--btn-primary-hover);
+  --shadow-soft: 0 10px 22px rgba(15, 23, 42, 0.05);
   color-scheme: light;
 }
 html.dark {
@@ -54,6 +79,9 @@ html.dark {
   --button-border: #334155;
   --mint: var(--tenant-primary, #45b69c);
   --navy: var(--tenant-secondary, #0D121F);
+  --accent: #22d3ee;
+  --accent-strong: #14b8a6;
+  --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.08);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -95,7 +123,12 @@ html.light header.topbar,
 html.light .topbar,
 html.light .toolbar,
 html.light .main-grid,
-html.light .kpi-grid {
+html.light .kpi-grid,
+html.light .cabinet-content,
+html.light .cabinet-card,
+html.light .account-card,
+html.light .quick-grid button,
+html.light .system-control-page {
   background: var(--paper);
   color: var(--ink);
 }
@@ -109,9 +142,16 @@ html.light .system-section,
 html.light .cabinet-modal,
 html.light .topbar,
 html.light .toolbar,
-html.light .content {
+html.light .content,
+html.light .white-panel,
+html.light .cabinet-card,
+html.light .account-card,
+html.light .quick-grid button,
+html.light .cabinet-header,
+html.light .settings-page,
+html.light .system-control-page {
   border-color: var(--line);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-soft);
 }
 
 html.light .nav-item,
@@ -128,7 +168,13 @@ html.light .person-avatar,
 html.light .activity-icon,
 html.light .brand-mark,
 html.light .user-avatar,
-html.light .top-avatar {
+html.light .top-avatar,
+html.light .cabinet-nav,
+html.light .cabinet-support,
+html.light .wallet-actions button,
+html.light .quick-grid button,
+html.light .secondary-action,
+html.light .account-more {
   background: var(--surface);
   color: var(--ink);
   border-color: var(--line);
@@ -146,13 +192,20 @@ html.light .topbar,
 html.light .toolbar,
 html.light .sidebar,
 html.light .content,
+html.light .cabinet-card,
+html.light .account-card,
+html.light .quick-grid button,
 html.light .rounded-lg,
 html.light .rounded-md,
 html.light .rounded-xl,
-html.light .rounded-2xl {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.98));
-  border: 1px solid rgba(148, 163, 184, 0.42);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06), 0 1px 0 rgba(255,255,255,0.7) inset;
+html.light .rounded-2xl,
+html.light .cabinet-header,
+html.light .settings-page,
+html.light .system-control-page,
+html.light .system-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
 
 html.light button,
@@ -160,11 +213,27 @@ html.light .back-button,
 html.light .primary-action,
 html.light .save-button,
 html.light .auth-button,
-html.light .secondary-action {
-  background: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
-  color: #f8fdff;
-  border-color: rgba(14, 165, 233, 0.35);
-  box-shadow: 0 12px 22px rgba(14, 165, 233, 0.18), inset 0 1px 0 rgba(255,255,255,0.42);
+html.light .secondary-action,
+html.light .wallet-actions button,
+html.light .account-more,
+html.light .quick-grid button,
+html.light .modal-submit {
+  border-radius: 12px;
+  border: 1px solid transparent;
+  letter-spacing: 0.01em;
+  transition: transform 0.18s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+}
+
+html.light .primary-action,
+html.light .save-button,
+html.light .auth-button,
+html.light .modal-submit,
+html.light .wallet-actions button[data-action="deposit"],
+html.light .wallet-actions button:first-child {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-color: var(--btn-primary-bg);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
 }
 
 html.light .back-button,
@@ -176,11 +245,15 @@ html.light .nav-item,
 html.light .modal-close,
 html.light .settings-tab,
 html.light .toolbar button,
-html.light .top-actions button {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.98));
-  color: #0f172a;
-  border-color: #dbe5ef;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255,255,255,0.9);
+html.light .top-actions button,
+html.light .cabinet-nav,
+html.light .wallet-actions button:last-child,
+html.light .quick-grid button,
+html.light .account-more {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 
 html.light .back-button:hover:not(:disabled),
@@ -192,9 +265,76 @@ html.light .secondary-action:hover:not(:disabled),
 html.light .outline-button:hover:not(:disabled),
 html.light .date-button:hover:not(:disabled),
 html.light .icon-button:hover:not(:disabled),
-html.light .nav-item:hover:not(:disabled) {
+html.light .nav-item:hover:not(:disabled),
+html.light .cabinet-nav:hover:not(:disabled),
+html.light .quick-grid button:hover:not(:disabled),
+html.light .wallet-actions button:hover:not(:disabled),
+html.light .account-more:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(14, 165, 233, 0.12), inset 0 1px 0 rgba(255,255,255,0.95);
+  filter: saturate(1.04);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.1);
+}
+
+html.light .primary-action:hover:not(:disabled),
+html.light .save-button:hover:not(:disabled),
+html.light .auth-button:hover:not(:disabled),
+html.light .modal-submit:hover:not(:disabled) {
+  background: var(--btn-primary-hover);
+}
+
+html.light .secondary-action:hover:not(:disabled),
+html.light .outline-button:hover:not(:disabled),
+html.light .date-button:hover:not(:disabled),
+html.light .nav-item:hover:not(:disabled),
+html.light .cabinet-nav:hover:not(:disabled),
+html.light .quick-grid button:hover:not(:disabled),
+html.light .wallet-actions button:hover:not(:disabled),
+html.light .account-more:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+html.light .wallet-actions button,
+html.light .quick-grid button,
+html.light .account-more {
+  font-weight: 700;
+}
+
+html.light .quick-grid button {
+  border-radius: 14px;
+  padding-block: 14px;
+}
+
+html.light .secondary-action,
+html.light .outline-button,
+html.light .date-button,
+html.light .nav-item,
+html.light .cabinet-nav,
+html.light .settings-tab {
+  position: relative;
+}
+
+html.light .secondary-action::before,
+html.light .outline-button::before,
+html.light .date-button::before,
+html.light .nav-item::before,
+html.light .cabinet-nav::before,
+html.light .settings-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(20, 184, 166, 0.04));
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+html.light .secondary-action:hover::before,
+html.light .outline-button:hover::before,
+html.light .date-button:hover::before,
+html.light .nav-item:hover::before,
+html.light .cabinet-nav:hover::before,
+html.light .settings-tab:hover::before {
+  opacity: 1;
 }
 
 html.light .theme-pill,
@@ -224,7 +364,11 @@ html.light .topbar,
 html.light .kpi-card,
 html.light .panel,
 html.light .content,
-html.light .app-shell {
+html.light .app-shell,
+html.light .cabinet-header,
+html.light .cabinet-sidebar,
+html.light .system-section,
+html.light .settings-card {
   background-color: var(--panel) !important;
 }
 
@@ -242,8 +386,9 @@ html.light .brand,
 html.light .topbar h1,
 html.light .nav-item,
 html.light .eyebrow,
-html.light h2,
 html.light h1,
+html.light h2,
+html.light h3,
 html.light strong,
 html.light p,
 html.light span,
@@ -257,7 +402,15 @@ html.light li,
 html.light b,
 html.light em,
 html.light i,
-html.light button {
+html.light button,
+html.light .cabinet-brand strong,
+html.light .cabinet-brand span,
+html.light .cabinet-user,
+html.light .cabinet-eyebrow,
+html.light .transaction-table,
+html.light .analytics-card,
+html.light .owner-card,
+html.light .stat-label {
   color: var(--ink) !important;
 }
 
@@ -265,7 +418,17 @@ html.light .text-slate-500,
 html.light .text-slate-600,
 html.light .text-slate-700,
 html.light .text-slate-800,
-html.light .text-slate-900 {
+html.light .text-slate-900,
+html.light .cabinet-nav,
+html.light .cabinet-support small,
+html.light .wallet-meta,
+html.light .summary-row span,
+html.light .account-identity span,
+html.light .settings-subtitle,
+html.light .system-subtitle,
+html.light .owner-status,
+html.light .muted,
+html.light .muted-text {
   color: var(--muted) !important;
 }
 
@@ -275,7 +438,12 @@ html.light .border-slate-600,
 html.light .border-slate-500,
 html.light .border-white\/10,
 html.light .border-white\/20,
-html.light .border-white\/30 {
+html.light .border-white\/30,
+html.light .cabinet-header,
+html.light .cabinet-sidebar,
+html.light .cabinet-support,
+html.light .system-section,
+html.light .settings-card {
   border-color: var(--line) !important;
 }
 
@@ -291,16 +459,45 @@ html.light .text-cyan-400,
 html.light .text-emerald-300,
 html.light .text-emerald-400,
 html.light .text-blue-300,
-html.light .text-sky-300 {
-  color: #0f766e !important;
+html.light .text-sky-300,
+html.light .text-cyan-500,
+html.light .text-emerald-500,
+html.light .brand-dot,
+html.light .nav-item.active .nav-icon,
+html.light .primary-badge,
+html.light .positive {
+  color: var(--accent-strong) !important;
 }
 
 html.light .bg-emerald-500\/5,
 html.light .bg-emerald-500\/10,
 html.light .bg-cyan-500\/5,
-html.light .bg-cyan-500\/10 {
-  background-color: rgba(15, 118, 110, 0.08) !important;
+html.light .bg-cyan-500\/10,
+html.light .notification-dot,
+html.light .live-pill,
+html.light .theme-pill {
+  background-color: rgba(20, 184, 166, 0.09) !important;
 }
+
+html.light .cabinet-nav.active,
+html.light .nav-item.active,
+html.light .settings-tab.active {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.08), rgba(20, 184, 166, 0.06));
+  border-color: rgba(14, 165, 233, 0.3);
+  color: var(--ink);
+}
+
+html.light .modal-backdrop {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+html.light .cabinet-modal,
+html.light .modal-shell {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.98));
+  border-color: var(--line);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.12);
+}
+
 main, section, article, aside, header, footer, nav, div, form { background: transparent; }
 button {
   font: inherit;
