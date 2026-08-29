@@ -132,6 +132,44 @@ html.light .owner-status-dot,
 html.light .online-dot {
   filter: saturate(0.9);
 }
+
+html.light .bg-\[\#0D121F\],
+html.light .bg-\[\#070A11\],
+html.light .bg-slate-950,
+html.light .bg-slate-900,
+html.light .bg-slate-800 {
+  background-color: var(--panel) !important;
+}
+
+html.light .text-white,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300,
+html.light .text-slate-400 {
+  color: var(--ink) !important;
+}
+
+html.light .text-slate-500,
+html.light .text-slate-600,
+html.light .text-slate-700,
+html.light .text-slate-800 {
+  color: var(--muted) !important;
+}
+
+html.light .border-slate-800,
+html.light .border-slate-700,
+html.light .border-slate-600,
+html.light .border-slate-500 {
+  border-color: var(--line) !important;
+}
+
+html.light .bg-cyan-500\/5,
+html.light .bg-cyan-500\/10,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-900\/80 {
+  background-color: rgba(148, 163, 184, 0.08) !important;
+}
 main, section, article, aside, header, footer, nav, div, form { background: transparent; }
 button {
   font: inherit;
