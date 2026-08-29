@@ -27,6 +27,7 @@ from .api.v1.broker.audit import router as audit_router
 from .api.v1.broker.ib_partners import router as ib_partners_router
 from .api.v1.broker.transactions import router as transactions_router
 from .api.v1.broker.kyc_documents import router as kyc_documents_router
+from .api.v1.broker.workflows import router as workflows_router
 from .api.v1.trader.accounts import router as trader_accounts_router
 from .api.v1.trader.dashboard import router as trader_dashboard_router
 from .api.v1.trader.profile import router as trader_profile_router
@@ -74,6 +75,7 @@ app.include_router(audit_router)
 app.include_router(ib_partners_router)
 app.include_router(transactions_router)
 app.include_router(kyc_documents_router)
+app.include_router(workflows_router)
 app.include_router(trader_accounts_router)
 app.include_router(trader_dashboard_router)
 app.include_router(trader_profile_router)

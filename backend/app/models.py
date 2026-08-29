@@ -867,6 +867,90 @@ class IBCommission(Base):
     min_turnover: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
     max_turnover: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+
+
+# ==== WORKFLOWS & AUTOMATION ====
+class Workflow(Base):
+    """Workflow automation engine for business processes."""
+    __tablename__ = "workflows"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # 'lead', 'client', 'deposit'
+    is_active: Mapped[bool] = mapped_column(default=True, index=True)
+    trigger_type: Mapped[str] = mapped_column(String(50))  # 'entity_created', 'status_changed', 'time_based'
+    trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WorkflowAction(Base):
+    """Actions to execute when workflow is triggered."""
+    __tablename__ = "workflow_actions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUID] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), index=True)
+    action_type: Mapped[str] = mapped_column(String(50))  # 'send_notification', 'assign_lead', 'create_task', 'update_field', 'send_email'
+    action_config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    order: Mapped[int] = mapped_column(default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WorkflowCondition(Base):
+    """Conditional logic for workflow execution."""
+    __tablename__ = "workflow_conditions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUID] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), index=True)
+    field_name: Mapped[str] = mapped_column(String(100))
+    operator: Mapped[str] = mapped_column(String(50))  # 'equals', 'contains', 'greater_than', 'less_than', 'is_empty'
+    value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    logic_operator: Mapped[str] = mapped_column(String(10), default="AND")  # 'AND', 'OR'
+    order: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkflowExecution(Base):
+    """Tracks workflow execution history."""
+    __tablename__ = "workflow_executions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUID] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), index=True)
+    entity_id: Mapped[UUID] = mapped_column(index=True)
+    entity_type: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # 'PENDING', 'IN_PROGRESS', 'SUCCESS', 'FAILED'
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+
+
+class WorkflowActionExecution(Base):
+    """Tracks individual action execution within a workflow."""
+    __tablename__ = "workflow_action_executions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_execution_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_executions.id", ondelete="CASCADE"), index=True
+    )
+    workflow_action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_actions.id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # 'PENDING', 'SUCCESS', 'FAILED'
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     effective_to: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
