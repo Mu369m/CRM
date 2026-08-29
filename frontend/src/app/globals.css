@@ -74,7 +74,12 @@ html.light .cabinet-shell,
 html.light .cabinet-sidebar,
 html.light .cabinet-header,
 html.light .modal-shell,
-html.light .cabinet-modal {
+html.light .cabinet-modal,
+html.light header.topbar,
+html.light .topbar,
+html.light .toolbar,
+html.light .main-grid,
+html.light .kpi-grid {
   background: var(--paper);
   color: var(--ink);
 }
@@ -85,7 +90,10 @@ html.light .panel,
 html.light .kpi-card,
 html.light .settings-card,
 html.light .system-section,
-html.light .cabinet-modal {
+html.light .cabinet-modal,
+html.light .topbar,
+html.light .toolbar,
+html.light .content {
   border-color: var(--line);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
@@ -98,7 +106,13 @@ html.light .settings-tab,
 html.light .icon-button,
 html.light .top-actions button,
 html.light .toolbar button,
-html.light .nav-item.active {
+html.light .nav-item.active,
+html.light .icon-button.notification,
+html.light .person-avatar,
+html.light .activity-icon,
+html.light .brand-mark,
+html.light .user-avatar,
+html.light .top-avatar {
   background: var(--surface);
   color: var(--ink);
   border-color: var(--line);
@@ -146,7 +160,13 @@ html.light .bg-white\/10,
 html.light .bg-white\/5,
 html.light .bg-white\/\[0\.03\],
 html.light .bg-cyan-500\/5,
-html.light .bg-cyan-500\/10 {
+html.light .bg-cyan-500\/10,
+html.light .sidebar,
+html.light .topbar,
+html.light .kpi-card,
+html.light .panel,
+html.light .content,
+html.light .app-shell {
   background-color: var(--panel) !important;
 }
 
@@ -159,7 +179,21 @@ html.light .text-slate-500,
 html.light .text-slate-600,
 html.light .text-slate-700,
 html.light .text-slate-800,
-html.light .text-slate-900 {
+html.light .text-slate-900,
+html.light .brand,
+html.light .topbar h1,
+html.light .nav-item,
+html.light .eyebrow,
+html.light h2,
+html.light h1,
+html.light strong,
+html.light p,
+html.light span,
+html.light td,
+html.light th,
+html.light label,
+html.light small,
+html.light time {
   color: var(--ink) !important;
 }
 
