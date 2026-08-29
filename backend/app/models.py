@@ -724,3 +724,340 @@ class EntityTag(Base):
     entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
     tag_id: Mapped[UUID] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ==== CLIENT MANAGEMENT ====
+class Client(Base):
+    """Client/trader entity."""
+    __tablename__ = "clients"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    first_name: Mapped[str] = mapped_column(String(100))
+    last_name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    trading_platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    account_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    assigned_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    campaign_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True
+    )
+    ib_partner_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="NEW", index=True)
+    total_deposits: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    total_withdrawals: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    net_deposits: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    last_deposit_date: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_withdrawal_date: Mapped[datetime | None] = mapped_column(nullable=True)
+    is_archived: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ClientAccount(Base):
+    """Trading account linked to a client."""
+    __tablename__ = "client_accounts"
+    __table_args__ = (UniqueConstraint("tenant_id", "account_number", name="uq_account_number"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    account_number: Mapped[str] = mapped_column(String(100))
+    platform: Mapped[str] = mapped_column(String(50))  # MT5, MT4, etc.
+    server: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    trading_status: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Active, Suspended
+    account_balance: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    equity: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    margin: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    free_margin: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    leverage: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ClientFinancials(Base):
+    """Cumulative financial data for a client."""
+    __tablename__ = "client_financials"
+    __table_args__ = (UniqueConstraint("tenant_id", "client_id", name="uq_client_financials"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    total_deposits: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    total_withdrawals: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    net_deposits: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    total_trading_volume: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    total_commissions_paid: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    total_profit_loss: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ==== IB / AFFILIATE MANAGEMENT ====
+class IBPartner(Base):
+    """IB/Affiliate partner managing client referrals."""
+    __tablename__ = "ib_partners"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    first_name: Mapped[str] = mapped_column(String(100))
+    last_name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    ib_level: Mapped[int] = mapped_column(default=1)
+    parent_ib_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("ib_partners.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    commission_tier: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="ACTIVE", index=True)
+    total_clients: Mapped[int] = mapped_column(default=0)
+    total_commissions: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    total_deposits_referred: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    bank_account: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    kyc_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class IBRelationship(Base):
+    """Links IBs to their referred clients."""
+    __tablename__ = "ib_relationships"
+    __table_args__ = (UniqueConstraint("ib_partner_id", "client_id", name="uq_ib_client"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    ib_partner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("ib_partners.id", ondelete="CASCADE"), index=True
+    )
+    client_id: Mapped[UUID] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), index=True
+    )
+    referred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(50), default="ACTIVE")
+
+
+class IBCommission(Base):
+    """Commission rates and rules for IBs."""
+    __tablename__ = "ib_commissions"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    ib_partner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("ib_partners.id", ondelete="CASCADE"), index=True
+    )
+    commission_type: Mapped[str] = mapped_column(String(50))  # "DEPOSIT", "SPREAD", "VOLUME", etc.
+    base_rate: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    tier_level: Mapped[int | None] = mapped_column(nullable=True)
+    min_turnover: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    max_turnover: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    effective_to: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IBPayout(Base):
+    """Commission payouts to IBs."""
+    __tablename__ = "ib_payouts"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    ib_partner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("ib_partners.id", ondelete="CASCADE"), index=True
+    )
+    payout_period: Mapped[str] = mapped_column(String(50))  # "2026-08", "2026-Q3", etc.
+    total_commissions: Mapped[Decimal] = mapped_column(Numeric(19, 2))
+    total_clients_referred: Mapped[int] = mapped_column()
+    status: Mapped[str] = mapped_column(String(50), default="PENDING")
+    payment_status: Mapped[str] = mapped_column(String(50), default="PENDING")
+    payment_date: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ==== DEPOSITS & WITHDRAWALS ====
+class DepositMethod(Base):
+    """Available deposit payment methods."""
+    __tablename__ = "deposit_methods"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    provider: Mapped[str] = mapped_column(String(100))  # "Stripe", "Wire Transfer", "Crypto", etc.
+    method_type: Mapped[str] = mapped_column(String(50))  # "CARD", "BANK", "CRYPTO", "E-WALLET"
+    min_amount: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    max_amount: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    processing_fee_percent: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("0"))
+    processing_time_hours: Mapped[int | None] = mapped_column(nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    requires_verification: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Deposit(Base):
+    """Client deposit transactions."""
+    __tablename__ = "deposits"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 2))
+    currency: Mapped[str] = mapped_column(String(3))  # USD, EUR, etc.
+    method_id: Mapped[UUID] = mapped_column(
+        ForeignKey("deposit_methods.id", ondelete="RESTRICT"), index=True
+    )
+    method_name: Mapped[str] = mapped_column(String(200))
+    payment_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # PENDING, APPROVED, REJECTED, COMPLETED
+    processing_fee: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(19, 2))
+    approved_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WithdrawalMethod(Base):
+    """Available withdrawal payment methods."""
+    __tablename__ = "withdrawal_methods"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    provider: Mapped[str] = mapped_column(String(100))
+    method_type: Mapped[str] = mapped_column(String(50))  # "CARD", "BANK", "CRYPTO", "E-WALLET"
+    min_amount: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    max_amount: Mapped[Decimal | None] = mapped_column(Numeric(19, 2), nullable=True)
+    processing_fee_percent: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("0"))
+    processing_time_hours: Mapped[int | None] = mapped_column(nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    requires_verification: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Withdrawal(Base):
+    """Client withdrawal transactions."""
+    __tablename__ = "withdrawals"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 2))
+    currency: Mapped[str] = mapped_column(String(3))
+    method_id: Mapped[UUID] = mapped_column(
+        ForeignKey("withdrawal_methods.id", ondelete="RESTRICT"), index=True
+    )
+    method_name: Mapped[str] = mapped_column(String(200))
+    payment_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # PENDING, APPROVED, REJECTED, COMPLETED
+    processing_fee: Mapped[Decimal] = mapped_column(Numeric(19, 2), default=Decimal("0"))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(19, 2))
+    approved_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# ==== KYC & DOCUMENT MANAGEMENT ====
+class DocumentType(Base):
+    """Document types required for KYC."""
+    __tablename__ = "document_types"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_doc_type_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    required_for_kyc: Mapped[bool] = mapped_column(default=False)
+    max_file_size_mb: Mapped[int] = mapped_column(default=10)
+    allowed_formats: Mapped[str] = mapped_column(String(100), default="pdf,jpg,png")
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KYCDocument(Base):
+    """Client KYC documents."""
+    __tablename__ = "kyc_documents"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    document_type_id: Mapped[UUID] = mapped_column(
+        ForeignKey("document_types.id", ondelete="RESTRICT"), index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str] = mapped_column(String(500))
+    file_size_bytes: Mapped[int] = mapped_column()
+    mime_type: Mapped[str] = mapped_column(String(50))
+    uploaded_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # PENDING, APPROVED, REJECTED
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    approved_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class KYCApproval(Base):
+    """KYC verification workflow and approval status."""
+    __tablename__ = "kyc_approvals"
+    __table_args__ = (UniqueConstraint("client_id", "kyc_level", name="uq_kyc_level"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    kyc_level: Mapped[str] = mapped_column(String(50))  # "BASIC", "INTERMEDIATE", "FULL"
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    verified_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

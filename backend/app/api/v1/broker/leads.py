@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, EmailStr
 from app.core.db_router import get_tenant_db
 from app.models import Lead, Task, Note, Activity, Pipeline, PipelineStage
 from app.security import current_claims
+from app.middleware.permission_check import check_permission
 
 router = APIRouter(prefix="/api/v1/broker/leads", tags=["Leads"])
 
@@ -152,9 +153,16 @@ async def create_lead(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Create a new lead."""
+    """Create a new lead. Requires: leads.create"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
+    
+    # Check permission
+    has_permission = await check_permission(
+        user_id, "leads", "create", db, tenant_id
+    )
+    if not has_permission:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     # Verify pipeline and stage exist and belong to tenant
     result = await db.execute(
@@ -219,8 +227,15 @@ async def list_leads(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """List leads with filtering."""
+    """List leads with filtering. Requires: leads.view"""
     tenant_id = UUID(claims["tenant_id"])
+    
+    # Check permission
+    has_permission = await check_permission(
+        UUID(claims["sub"]), "leads", "view", db, tenant_id
+    )
+    if not has_permission:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     query = select(Lead).where(
         (Lead.tenant_id == tenant_id)
@@ -270,8 +285,15 @@ async def get_lead(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Get a specific lead."""
+    """Get a specific lead. Requires: leads.view"""
     tenant_id = UUID(claims["tenant_id"])
+    
+    # Check permission
+    has_permission = await check_permission(
+        UUID(claims["sub"]), "leads", "view", db, tenant_id
+    )
+    if not has_permission:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(Lead).where(
@@ -294,9 +316,16 @@ async def update_lead(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Update a lead."""
+    """Update a lead. Requires: leads.edit"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
+    
+    # Check permission
+    has_permission = await check_permission(
+        user_id, "leads", "edit", db, tenant_id
+    )
+    if not has_permission:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(Lead).where(
@@ -345,9 +374,16 @@ async def archive_lead(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Archive a lead (soft delete)."""
+    """Archive a lead (soft delete). Requires: leads.delete"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
+    
+    # Check permission
+    has_permission = await check_permission(
+        user_id, "leads", "delete", db, tenant_id
+    )
+    if not has_permission:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(Lead).where(
