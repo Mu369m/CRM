@@ -32,7 +32,8 @@ export interface MasterPaymentControl {
 }
 
 export interface ApiError {
-  detail: string;
+  detail?: string;
+  message?: string;
 }
 
 async function parseApiResponse(response: Response): Promise<unknown> {
@@ -68,7 +69,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const payload = await parseApiResponse(response);
     if (!response.ok) {
       const error = payload as Partial<ApiError>;
-      throw new Error(error.detail ?? error.message ?? response.statusText || "Request failed.");
+      throw new Error(error.detail ?? error.message ?? response.statusText ?? "Request failed.");
     }
     return payload as T;
   } catch (error) {
