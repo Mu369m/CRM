@@ -1,35 +1,224 @@
-"use client";
+﻿"use client";
 
-import { useState, type ReactNode } from "react";
-import { Activity, ArrowDownRight, ArrowUpRight, Bitcoin, Check, ChevronRight, Clock3, CreditCard, LayoutDashboard, MoreHorizontal, Search, TrendingUp, UserRound, Users, WalletCards, X } from "lucide-react";
-import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useEffect, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, Download, Eye, Plus, TrendingUp, Users } from "lucide-react";
+import MainLayout from "@/components/navigation/MainLayout";
 
-type OperationStatus = "Review" | "Pending" | "Approved" | "Rejected";
-type Operation = { id: string; client: string; account: string; type: "Deposit" | "Withdrawal"; amount: string; gateway: string; status: OperationStatus; initials: string };
-const cashflow = [
-  { day: "Mon", deposits: 920, withdrawals: 420 }, { day: "Tue", deposits: 1180, withdrawals: 530 }, { day: "Wed", deposits: 860, withdrawals: 390 },
-  { day: "Thu", deposits: 1460, withdrawals: 610 }, { day: "Fri", deposits: 1320, withdrawals: 760 }, { day: "Sat", deposits: 1880, withdrawals: 930 }, { day: "Sun", deposits: 1640, withdrawals: 680 },
-];
-const assets = [{ name: "XAUUSD", value: 34, color: "#fbbf24" }, { name: "EURUSD", value: 28, color: "#38bdf8" }, { name: "BTCUSD", value: 22, color: "#818cf8" }, { name: "Indices", value: 16, color: "#34d399" }];
-const initialOperations: Operation[] = [
-  { id: "OP-48291", client: "Amelia Thompson", account: "#FX-10482", type: "Deposit", amount: "$18,500.00", gateway: "USDT", status: "Review", initials: "AT" },
-  { id: "OP-48290", client: "Nikolai Petrov", account: "#FX-09831", type: "Withdrawal", amount: "$7,240.00", gateway: "Wire", status: "Pending", initials: "NP" },
-  { id: "OP-48289", client: "Sofia Mendes", account: "#FX-11720", type: "Deposit", amount: "$42,000.00", gateway: "Crypto", status: "Approved", initials: "SM" },
-  { id: "OP-48288", client: "Daniel Okafor", account: "#FX-08317", type: "Withdrawal", amount: "$3,800.00", gateway: "Wire", status: "Review", initials: "DO" },
-];
-const accentClasses = { emerald: "bg-emerald-400/10 text-emerald-300", cyan: "bg-cyan-400/10 text-cyan-300", amber: "bg-amber-400/10 text-amber-300", indigo: "bg-indigo-400/10 text-indigo-300" };
+type WidgetKey = "clients" | "cashflow" | "kyc" | "top-traders";
 
-export default function AdminDashboardPage() {
-  const [rows, setRows] = useState(initialOperations);
-  const [range, setRange] = useState("7D");
-  const updateStatus = (id: string, status: OperationStatus) => setRows((current) => current.map((row) => row.id === id ? { ...row, status } : row));
-  return <main className="min-h-screen bg-[#06080E] px-4 py-5 text-slate-100 sm:px-6 lg:px-8"><div className="mx-auto max-w-[1480px]">
-    <header className="mb-7 flex flex-col gap-5 border-b border-slate-800/80 pb-6 xl:flex-row xl:items-center xl:justify-between"><div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-cyan-300"><LayoutDashboard size={22} /></div><div><p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-400">Northstar / Master operations</p><h1 className="mt-1 text-2xl font-semibold text-white sm:text-3xl">Broker analytics</h1></div></div><div className="flex flex-wrap items-center gap-3"><div className="flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/5 px-3 py-2 text-xs text-emerald-300"><span className="live-pulse size-2 rounded-full bg-emerald-400" /> MT4/MT5 Bridge Online</div><LiveStat icon={Activity} label="Master volume" value="$142.8M" /><LiveStat icon={Users} label="Sessions" value="638" /></div></header>
-    <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi icon={WalletCards} label="AUM / net deposits" value="$4,850,200" trend="+14.2%" accent="emerald" chart={[32, 42, 38, 55, 48, 67, 62, 78]} /><Kpi icon={TrendingUp} label="24h trading volume" value="$142.8M" trend="+8.6%" accent="cyan" detail="Forex 61% · Metals 24% · Crypto 15%" /><Kpi icon={Clock3} label="Pending approvals" value="25" trend="Action needed" accent="amber" detail="12 deposits · 5 withdrawals · 8 KYCs" /><Kpi icon={UserRound} label="Active trader accounts" value="4,582" trend="68.4% live ratio" accent="indigo" detail="1,482 live · 3,100 demo" progress={48} /></div>
-    <div className="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,.75fr)]"><section className="rounded-lg border border-slate-800/80 bg-[#0B0F19] p-5 sm:p-6"><div className="mb-5 flex flex-wrap items-start justify-between gap-4"><div><p className="kicker">Cashflow intelligence</p><h2 className="heading">Deposits vs withdrawals</h2><p className="mt-1 text-xs text-slate-500">Net movement across all connected broker accounts</p></div><div className="flex rounded-md border border-slate-800 bg-[#06080E] p-1">{["7D", "30D"].map((item) => <button className={`rounded px-3 py-1.5 text-[11px] font-semibold ${range === item ? "bg-slate-700 text-white" : "text-slate-500"}`} key={item} onClick={() => setRange(item)}>{item}</button>)}</div></div><div className="mb-3 flex gap-5 text-[11px] text-slate-400"><span><i className="dot bg-emerald-400" />Deposits <b className="text-slate-200">$9.2M</b></span><span><i className="dot bg-rose-400" />Withdrawals <b className="text-slate-200">$4.3M</b></span></div><div className="h-[270px] w-full"><ResponsiveContainer><AreaChart data={cashflow} margin={{ top: 12, right: 5, left: -25, bottom: 0 }}><defs><linearGradient id="depositFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={.3} /><stop offset="100%" stopColor="#34d399" stopOpacity={0} /></linearGradient><linearGradient id="withdrawFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#fb7185" stopOpacity={.24} /><stop offset="100%" stopColor="#fb7185" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 11 }} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "#475569", fontSize: 10 }} tickFormatter={(value: number | string) => `$${Number(value) / 1000}M`} /><Tooltip contentStyle={{ background: "#0B0F19", border: "1px solid #1e293b", borderRadius: 6, fontSize: 11 }} formatter={(value: number | string | Array<number | string>) => [`$${Number(Array.isArray(value) ? value[0] : value ?? 0)}k`, ""]} /><Area type="monotone" dataKey="deposits" stroke="#34d399" strokeWidth={2} fill="url(#depositFill)" /><Area type="monotone" dataKey="withdrawals" stroke="#fb7185" strokeWidth={2} fill="url(#withdrawFill)" /></AreaChart></ResponsiveContainer></div></section><section className="rounded-lg border border-slate-800/80 bg-[#0B0F19] p-5 sm:p-6"><p className="kicker">Exposure map</p><h2 className="heading">Asset class share</h2><div className="relative mx-auto h-[220px] max-w-[260px]"><ResponsiveContainer><PieChart><Pie data={assets} dataKey="value" innerRadius={67} outerRadius={94} paddingAngle={4} stroke="none">{assets.map((item) => <Cell key={item.name} fill={item.color} />)}</Pie></PieChart></ResponsiveContainer><div className="absolute inset-0 grid place-items-center text-center"><div><strong className="block text-2xl text-white">$142.8M</strong><span className="text-[10px] uppercase tracking-wider text-slate-500">24h volume</span></div></div></div><div className="grid grid-cols-2 gap-3">{assets.map((item) => <div className="flex items-center justify-between text-xs" key={item.name}><span className="text-slate-400"><i className="dot" style={{ background: item.color }} />{item.name}</span><b className="text-slate-200">{item.value}%</b></div>)}</div></section></div>
-    <section className="overflow-hidden rounded-lg border border-slate-800/80 bg-[#0B0F19]"><div className="flex flex-col gap-3 border-b border-slate-800/80 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div><p className="kicker">Financial operations</p><h2 className="heading">Approval queue <span className="ml-2 rounded bg-amber-400/10 px-2 py-1 text-[10px] text-amber-300">{rows.filter((row) => row.status === "Review" || row.status === "Pending").length} open</span></h2></div><div className="flex items-center gap-2"><button className="grid size-8 place-items-center rounded border border-slate-800 text-slate-400 hover:border-cyan-500/40" aria-label="Search operations"><Search size={15} /></button><button className="rounded border border-slate-800 px-3 py-2 text-[11px] text-slate-400 hover:border-cyan-500/40">Export ledger <ChevronRight size={13} className="ml-1 inline" /></button></div></div><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-[#080B13] text-[10px] uppercase tracking-wider text-slate-500"><tr>{["Client / account", "Operation", "Amount", "Gateway", "Status", "Action"].map((heading) => <th className="px-4 py-3 font-medium first:pl-6 last:text-right last:pr-6" key={heading}>{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-800/70">{rows.map((row) => <tr className="hover:bg-blue-500/[.03]" key={row.id}><td className="px-6 py-4"><div className="flex items-center gap-3"><span className="grid size-8 place-items-center rounded-full bg-cyan-400/10 text-[10px] font-bold text-cyan-300">{row.initials}</span><span><b className="block text-xs text-slate-200">{row.client}</b><small className="text-[10px] text-slate-500">{row.account} · {row.id}</small></span></div></td><td className={`px-4 py-4 text-xs ${row.type === "Deposit" ? "text-emerald-300" : "text-rose-300"}`}>{row.type === "Deposit" ? <ArrowDownRight size={14} className="mr-1 inline" /> : <ArrowUpRight size={14} className="mr-1 inline" />}{row.type}</td><td className="px-4 py-4 text-sm font-semibold text-slate-200">{row.amount}</td><td className="px-4 py-4 text-xs text-slate-400">{row.gateway === "Crypto" ? <Bitcoin size={14} className="mr-1 inline text-cyan-300" /> : <CreditCard size={14} className="mr-1 inline text-indigo-300" />}{row.gateway}</td><td className="px-4 py-4"><span className={`rounded px-2 py-1 text-[10px] font-semibold ${row.status === "Approved" ? "bg-emerald-400/10 text-emerald-300" : row.status === "Rejected" ? "bg-rose-400/10 text-rose-300" : "bg-amber-400/10 text-amber-300"}`}>{row.status}</span></td><td className="px-6 py-4 text-right">{row.status === "Review" || row.status === "Pending" ? <span className="inline-flex gap-1"><button className="grid size-7 place-items-center rounded border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10" onClick={() => updateStatus(row.id, "Approved")} aria-label={`Approve ${row.id}`}><Check size={14} /></button><button className="grid size-7 place-items-center rounded border border-rose-500/30 text-rose-300 hover:bg-rose-500/10" onClick={() => updateStatus(row.id, "Rejected")} aria-label={`Reject ${row.id}`}><X size={14} /></button></span> : <MoreHorizontal size={16} className="ml-auto text-slate-600" />}</td></tr>)}</tbody></table></div></section><footer className="flex flex-col gap-2 py-5 text-[10px] uppercase tracking-wider text-slate-600 sm:flex-row sm:justify-between"><span>Northstar master control · encrypted session</span><span>Last sync 00:04 ago · <b className="text-emerald-500">99.99% uptime</b></span></footer>
-  </div></main>;
+type StatCardProps = {
+  label: string;
+  value: string;
+  change: string;
+  icon: typeof Users;
+};
+
+export default function DashboardPage() {
+  const [widgets, setWidgets] = useState<WidgetKey[]>(["clients", "cashflow", "kyc", "top-traders"]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const toggleWidget = (key: WidgetKey) => {
+    setWidgets((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
+    );
+  };
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <main className="mx-auto max-w-7xl py-10">
+          <p className="text-slate-400">Loading dashboard...</p>
+        </main>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <main className="mx-auto max-w-7xl py-6">
+        <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[.25em] text-cyan-400">Broker insights</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">Dashboard</h1>
+            <p className="mt-2 text-sm text-slate-500">Performance overview across deposits, trading activity, and compliance.</p>
+          </div>
+
+          <div className="flex gap-2">
+            <button className="rounded border border-slate-700 bg-[#0D121F] px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">
+              <Download size={14} className="mr-1 inline" /> Export
+            </button>
+            <button className="rounded-md bg-cyan-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-500">
+              <Plus size={14} className="mr-1 inline" /> Add widget
+            </button>
+          </div>
+        </header>
+
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Total clients" value="4,823" change="+12.4%" icon={Users} />
+          <StatCard label="Active traders" value="3,148" change="+8.1%" icon={TrendingUp} />
+          <StatCard label="Net deposits" value="$4.2M" change="+24.6%" icon={DollarSign} />
+          <StatCard label="Pending KYC" value="24" change="Action needed" icon={Eye} />
+        </section>
+
+        <section className="mb-6 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.7fr)]">
+          {widgets.includes("cashflow") && (
+            <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-5">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">Cashflow</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Deposits vs withdrawals</h2>
+                </div>
+                <button onClick={() => toggleWidget("cashflow")} className="text-slate-500 hover:text-slate-300" aria-label="Hide cashflow widget">✕</button>
+              </div>
+
+              <div className="mb-4 flex gap-5 text-[11px] text-slate-400">
+                <span><span className="mr-2 inline-block size-2 rounded-full bg-emerald-400" /> Deposits</span>
+                <span><span className="mr-2 inline-block size-2 rounded-full bg-rose-400" /> Withdrawals</span>
+              </div>
+
+              <div className="grid h-48 grid-cols-7 gap-2">
+                {[42, 58, 36, 70, 60, 96, 80].map((height, index) => (
+                  <div key={index} className="flex h-full items-end gap-2">
+                    <div className="w-1/2 rounded-t bg-emerald-400/80" style={{ height: `${height}%` }} />
+                    <div className="w-1/2 rounded-t bg-rose-400/70" style={{ height: `${Math.max(18, height - 18)}%` }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {widgets.includes("clients") && (
+              <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">Accounts</p>
+                    <h2 className="mt-1 text-lg font-semibold text-white">Client mix</h2>
+                  </div>
+                  <button onClick={() => toggleWidget("clients")} className="text-slate-500 hover:text-slate-300" aria-label="Hide clients widget">✕</button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-sm text-slate-300">
+                    <span>Live</span>
+                    <span className="font-semibold text-emerald-300">68%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full w-[68%] rounded-full bg-emerald-400" />
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-slate-300">
+                    <span>Demo</span>
+                    <span className="font-semibold text-cyan-300">32%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full w-[32%] rounded-full bg-cyan-400" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {widgets.includes("kyc") && (
+              <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">Compliance</p>
+                    <h2 className="mt-1 text-lg font-semibold text-white">KYC status</h2>
+                  </div>
+                  <button onClick={() => toggleWidget("kyc")} className="text-slate-500 hover:text-slate-300" aria-label="Hide kyc widget">✕</button>
+                </div>
+
+                <div className="space-y-3 text-sm text-slate-300">
+                  <div className="flex items-center justify-between"><span>Verified</span><span className="text-emerald-300">91%</span></div>
+                  <div className="flex items-center justify-between"><span>Pending</span><span className="text-amber-300">24</span></div>
+                  <div className="flex items-center justify-between"><span>Rejected</span><span className="text-rose-300">7</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+          <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">Operations</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Approval queue</h2>
+              </div>
+              <span className="rounded bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300">8 open</span>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { client: "Amelia Thompson", type: "Deposit", amount: "$18,500", status: "Review", color: "text-amber-300" },
+                { client: "Nikolai Petrov", type: "Withdrawal", amount: "$7,240", status: "Pending", color: "text-cyan-300" },
+                { client: "Sofia Mendes", type: "Deposit", amount: "$42,000", status: "Approved", color: "text-emerald-300" },
+              ].map((item) => (
+                <div key={item.client} className="flex items-center justify-between rounded border border-slate-800 p-3">
+                  <div>
+                    <div className="text-sm font-medium text-white">{item.client}</div>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                      {item.type === "Deposit" ? <ArrowDownRight size={12} className="text-emerald-300" /> : <ArrowUpRight size={12} className="text-rose-300" />}
+                      {item.type}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-sm text-slate-200">{item.amount}</div>
+                    <div className={`mt-1 text-[10px] ${item.color}`}>{item.status}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {widgets.includes("top-traders") && (
+            <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">Leaders</p>
+                  <h2 className="mt-1 text-lg font-semibold text-white">Top traders</h2>
+                </div>
+                <button onClick={() => toggleWidget("top-traders")} className="text-slate-500 hover:text-slate-300" aria-label="Hide top traders widget">✕</button>
+              </div>
+
+              <div className="space-y-4 text-sm">
+                {[
+                  { name: "Amelia T.", equity: "$1.28M" },
+                  { name: "Nikolai P.", equity: "$980K" },
+                  { name: "Sofia M.", equity: "$860K" },
+                ].map((trader, idx) => (
+                  <div key={trader.name} className="flex items-center justify-between rounded border border-slate-800 px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      <span className="grid size-8 place-items-center rounded-full bg-cyan-500/15 text-[10px] font-bold text-cyan-300">{idx + 1}</span>
+                      <span className="text-slate-200">{trader.name}</span>
+                    </div>
+                    <span className="font-mono text-emerald-300">{trader.equity}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </main>
+    </MainLayout>
+  );
 }
 
-function LiveStat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) { return <div className="flex items-center gap-2 rounded-md border border-slate-800 bg-[#0B0F19] px-3 py-2 text-xs text-slate-400"><Icon size={14} className="text-indigo-300" /> {label} <strong className="text-slate-100">{value}</strong></div>; }
-function Kpi({ icon: Icon, label, value, trend, accent, detail, chart, progress }: { icon: typeof Activity; label: string; value: string; trend: string; accent: keyof typeof accentClasses; detail?: ReactNode; chart?: number[]; progress?: number }) { return <article className="group rounded-lg border border-slate-800/80 bg-[#0B0F19] p-5 transition hover:border-blue-500/40"><div className={`mb-5 grid size-9 place-items-center rounded-md ${accentClasses[accent]}`}><Icon size={18} /></div><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><div className="mt-1 flex items-end justify-between gap-2"><strong className="text-2xl font-semibold text-white">{value}</strong><span className={`rounded px-2 py-1 text-[10px] font-semibold ${accentClasses[accent]}`}>{trend}</span></div>{detail && <p className="mt-3 text-[10px] text-slate-500">{detail}</p>}{chart && <div className="mt-4 flex h-8 items-end gap-1">{chart.map((height, index) => <i className={`w-full rounded-t ${index === chart.length - 1 ? "bg-emerald-400/80" : "bg-emerald-400/30"}`} style={{ height: `${height}%` }} key={index} />)}</div>}{progress !== undefined && <div className="mt-4"><div className="mb-1 flex justify-between text-[10px] text-slate-500"><span>Live / demo ratio</span><span>{progress}%</span></div><div className="h-1.5 rounded-full bg-slate-800"><div className="h-full rounded-full bg-indigo-400" style={{ width: `${progress}%` }} /></div></div>}</article>; }
+function StatCard({ label, value, change, icon: Icon }: StatCardProps) {
+  return (
+    <article className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="rounded-md bg-cyan-500/10 p-2 text-cyan-300">
+          <Icon size={18} />
+        </div>
+        <span className="rounded bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-300">{change}</span>
+      </div>
+      <p className="text-[10px] uppercase tracking-[.2em] text-slate-500">{label}</p>
+      <strong className="mt-2 block text-2xl font-semibold text-white">{value}</strong>
+    </article>
+  );
+}
