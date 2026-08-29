@@ -20,6 +20,7 @@
   --line: #1e293b;
   --paper: #070A11;
   --panel: #0D121F;
+  --surface: #0f172a;
   --button-bg: #0f172a;
   --button-text: #e2e8f0;
   --button-border: #334155;
@@ -27,12 +28,27 @@
   --navy: var(--tenant-secondary, #0D121F);
   color-scheme: dark;
 }
-html.dark, html.light {
+html.light {
+  --ink: #0f172a;
+  --muted: #475569;
+  --line: #dfe7f3;
+  --paper: #f4f8fb;
+  --panel: #ffffff;
+  --surface: #edf4fb;
+  --button-bg: #e2e8f0;
+  --button-text: #0f172a;
+  --button-border: #cbd5e1;
+  --mint: var(--tenant-primary, #45b69c);
+  --navy: var(--tenant-secondary, #dfeaf7);
+  color-scheme: light;
+}
+html.dark {
   --ink: #e5edf7;
   --muted: #8aa1b4;
   --line: #1e293b;
   --paper: #070A11;
   --panel: #0D121F;
+  --surface: #0f172a;
   --button-bg: #0f172a;
   --button-text: #e2e8f0;
   --button-border: #334155;
@@ -44,6 +60,78 @@ html.dark, html.light {
 html, body, #__next { background: var(--paper); color: var(--ink); }
 html { background: var(--paper); }
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: Georgia, "Times New Roman", serif; }
+
+html.light body,
+html.light .app-shell,
+html.light .sidebar,
+html.light .content,
+html.light .panel,
+html.light .kpi-card,
+html.light .settings-card,
+html.light .settings-page,
+html.light .system-section,
+html.light .cabinet-shell,
+html.light .cabinet-sidebar,
+html.light .cabinet-header,
+html.light .modal-shell,
+html.light .cabinet-modal {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+html.light .sidebar,
+html.light .cabinet-sidebar,
+html.light .panel,
+html.light .kpi-card,
+html.light .settings-card,
+html.light .system-section,
+html.light .cabinet-modal {
+  border-color: var(--line);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+html.light .nav-item,
+html.light .modal-close,
+html.light .date-button,
+html.light .outline-button,
+html.light .settings-tab,
+html.light .icon-button,
+html.light .top-actions button,
+html.light .toolbar button,
+html.light .nav-item.active {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+html.light button,
+html.light .back-button,
+html.light .primary-action,
+html.light .save-button,
+html.light .auth-button,
+html.light .secondary-action {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.18), rgba(226, 232, 240, 0.94));
+  color: var(--button-text);
+  border-color: var(--button-border);
+}
+
+html.light .back-button:hover:not(:disabled),
+html.light button:hover:not(:disabled),
+html.light .primary-action:hover:not(:disabled),
+html.light .save-button:hover:not(:disabled),
+html.light .auth-button:hover:not(:disabled),
+html.light .secondary-action:hover:not(:disabled) {
+  filter: brightness(1.03);
+  border-color: rgba(14, 116, 144, 0.5);
+}
+
+html.light .theme-pill,
+html.light .live-pill,
+html.light .status-dot,
+html.light .owner-status-dot,
+html.light .online-dot {
+  filter: saturate(0.9);
+}
 main, section, article, aside, header, footer, nav, div, form { background: transparent; }
 button {
   font: inherit;
