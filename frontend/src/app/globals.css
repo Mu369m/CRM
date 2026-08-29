@@ -137,7 +137,16 @@ html.light .bg-\[\#0D121F\],
 html.light .bg-\[\#070A11\],
 html.light .bg-slate-950,
 html.light .bg-slate-900,
-html.light .bg-slate-800 {
+html.light .bg-slate-800,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-900\/80,
+html.light .bg-white,
+html.light .bg-white\/10,
+html.light .bg-white\/5,
+html.light .bg-white\/\[0\.03\],
+html.light .bg-cyan-500\/5,
+html.light .bg-cyan-500\/10 {
   background-color: var(--panel) !important;
 }
 
@@ -145,30 +154,54 @@ html.light .text-white,
 html.light .text-slate-100,
 html.light .text-slate-200,
 html.light .text-slate-300,
-html.light .text-slate-400 {
+html.light .text-slate-400,
+html.light .text-slate-500,
+html.light .text-slate-600,
+html.light .text-slate-700,
+html.light .text-slate-800,
+html.light .text-slate-900 {
   color: var(--ink) !important;
 }
 
 html.light .text-slate-500,
 html.light .text-slate-600,
 html.light .text-slate-700,
-html.light .text-slate-800 {
+html.light .text-slate-800,
+html.light .text-slate-900 {
   color: var(--muted) !important;
 }
 
 html.light .border-slate-800,
 html.light .border-slate-700,
 html.light .border-slate-600,
-html.light .border-slate-500 {
+html.light .border-slate-500,
+html.light .border-white\/10,
+html.light .border-white\/20,
+html.light .border-white\/30 {
   border-color: var(--line) !important;
 }
 
+html.light .shadow-black\/10,
+html.light .shadow-black\/20,
+html.light .shadow-black\/30,
+html.light .shadow-2xl {
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light .text-cyan-300,
+html.light .text-cyan-400,
+html.light .text-emerald-300,
+html.light .text-emerald-400,
+html.light .text-blue-300,
+html.light .text-sky-300 {
+  color: #0f766e !important;
+}
+
+html.light .bg-emerald-500\/5,
+html.light .bg-emerald-500\/10,
 html.light .bg-cyan-500\/5,
-html.light .bg-cyan-500\/10,
-html.light .bg-slate-800\/70,
-html.light .bg-slate-800\/80,
-html.light .bg-slate-900\/80 {
-  background-color: rgba(148, 163, 184, 0.08) !important;
+html.light .bg-cyan-500\/10 {
+  background-color: rgba(15, 118, 110, 0.08) !important;
 }
 main, section, article, aside, header, footer, nav, div, form { background: transparent; }
 button {
