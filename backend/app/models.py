@@ -418,3 +418,309 @@ class ManagerConnection(Base):
     encrypted_password: Mapped[str] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ==== CUSTOM FIELDS SYSTEM ====
+class CustomFieldGroup(Base):
+    """Group custom fields by category."""
+    __tablename__ = "custom_field_groups"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_custom_field_group_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # "LEAD", "CLIENT", "IB", etc.
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    fields: Mapped[list["CustomFieldDefinition"]] = relationship(back_populates="group", cascade="all, delete-orphan")
+
+
+class CustomFieldDefinition(Base):
+    """Define custom field schema."""
+    __tablename__ = "custom_field_definitions"
+    __table_args__ = (UniqueConstraint("tenant_id", "key", name="uq_custom_field_key"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[UUID] = mapped_column(ForeignKey("custom_field_groups.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(100))  # Unique internal key
+    label: Mapped[str] = mapped_column(String(200))  # Display label
+    field_type: Mapped[str] = mapped_column(String(30))  # TEXT, NUMBER, CURRENCY, DATE, DROPDOWN, CHECKBOX, PHONE, EMAIL, etc.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_required: Mapped[bool] = mapped_column(default=False)
+    is_searchable: Mapped[bool] = mapped_column(default=True)
+    is_filterable: Mapped[bool] = mapped_column(default=True)
+    is_sortable: Mapped[bool] = mapped_column(default=True)
+    display_order: Mapped[int] = mapped_column(default=0)
+    default_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_rules: Mapped[dict] = mapped_column(JSONB, default=dict)  # min, max, pattern, etc.
+    options_json: Mapped[list[dict]] = mapped_column(JSONB, default=list)  # For DROPDOWN, MULTI_SELECT, RADIO
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    group: Mapped[CustomFieldGroup] = relationship(back_populates="fields")
+    values: Mapped[list["CustomFieldValue"]] = relationship(back_populates="field", cascade="all, delete-orphan")
+
+
+class CustomFieldValue(Base):
+    """Store custom field values for entities."""
+    __tablename__ = "custom_field_values"
+    __table_args__ = (UniqueConstraint("field_id", "entity_id", name="uq_custom_field_value_entity"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    field_id: Mapped[UUID] = mapped_column(ForeignKey("custom_field_definitions.id", ondelete="CASCADE"), index=True)
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)  # LEAD ID, CLIENT ID, IB ID, etc.
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    field: Mapped[CustomFieldDefinition] = relationship(back_populates="values")
+
+
+# ==== PIPELINE SYSTEM ====
+class Pipeline(Base):
+    """Define CRM pipeline for a tenant."""
+    __tablename__ = "pipelines"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_pipeline_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # "LEAD", "CLIENT", etc.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    is_default: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    stages: Mapped[list["PipelineStage"]] = relationship(back_populates="pipeline", cascade="all, delete-orphan")
+
+
+class PipelineStage(Base):
+    """Stages within a pipeline."""
+    __tablename__ = "pipeline_stages"
+    __table_args__ = (UniqueConstraint("pipeline_id", "name", name="uq_pipeline_stage_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    pipeline_id: Mapped[UUID] = mapped_column(ForeignKey("pipelines.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    color: Mapped[str] = mapped_column(String(7), default="#6B7280")  # Hex color
+    display_order: Mapped[int] = mapped_column(default=0)
+    required_fields: Mapped[list[str]] = mapped_column(JSONB, default=list)  # Field keys required at this stage
+    is_terminal: Mapped[bool] = mapped_column(default=False)  # Is this a final stage
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    pipeline: Mapped[Pipeline] = relationship(back_populates="stages")
+
+
+# ==== DYNAMIC RBAC ====
+class DynamicRole(Base):
+    """Custom roles per tenant (not hardcoded)."""
+    __tablename__ = "dynamic_roles"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_dynamic_role_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))  # "Sales Manager", "Compliance Officer", etc.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_system: Mapped[bool] = mapped_column(default=False)  # System roles can't be deleted
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    permissions: Mapped[list["DynamicPermission"]] = relationship(back_populates="role", cascade="all, delete-orphan", secondary="role_permissions")
+
+
+class DynamicPermission(Base):
+    """Granular permissions per tenant."""
+    __tablename__ = "dynamic_permissions"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_dynamic_permission_code"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100))  # "leads.create", "clients.edit", "deposits.approve", etc.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    module: Mapped[str] = mapped_column(String(50))  # "LEADS", "CLIENTS", "DEPOSITS", "REPORTS", etc.
+    action: Mapped[str] = mapped_column(String(50))  # "VIEW", "CREATE", "EDIT", "DELETE", "APPROVE", etc.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RolePermission(Base):
+    """Mapping between roles and permissions."""
+    __tablename__ = "role_permissions"
+    __table_args__ = (UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    role_id: Mapped[UUID] = mapped_column(ForeignKey("dynamic_roles.id", ondelete="CASCADE"), index=True)
+    permission_id: Mapped[UUID] = mapped_column(ForeignKey("dynamic_permissions.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserDynamicRole(Base):
+    """Assign dynamic roles to users."""
+    __tablename__ = "user_dynamic_roles"
+    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_role"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role_id: Mapped[UUID] = mapped_column(ForeignKey("dynamic_roles.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ==== LEAD MANAGEMENT ====
+class Lead(Base):
+    """Lead entity with custom fields."""
+    __tablename__ = "leads"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    first_name: Mapped[str] = mapped_column(String(100))
+    last_name: Mapped[str] = mapped_column(String(100))
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)  # "Google", "Facebook", "Referral", etc.
+    campaign_id: Mapped[UUID | None] = mapped_column(ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True)
+    assigned_to_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    pipeline_id: Mapped[UUID] = mapped_column(ForeignKey("pipelines.id", ondelete="RESTRICT"), index=True)
+    stage_id: Mapped[UUID] = mapped_column(ForeignKey("pipeline_stages.id", ondelete="RESTRICT"), index=True)
+    lead_score: Mapped[int] = mapped_column(default=0)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_followup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_archived: Mapped[bool] = mapped_column(default=False, index=True)
+    pipeline: Mapped[Pipeline] = relationship("Pipeline")
+    stage: Mapped[PipelineStage] = relationship("PipelineStage")
+
+
+# ==== DEPARTMENT & TEAM SYSTEM ====
+class Department(Base):
+    """Departments within a tenant."""
+    __tablename__ = "departments"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_department_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manager_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    teams: Mapped[list["Team"]] = relationship(back_populates="department", cascade="all, delete-orphan")
+
+
+class Team(Base):
+    """Teams within departments."""
+    __tablename__ = "teams"
+    __table_args__ = (UniqueConstraint("department_id", "name", name="uq_team_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    department_id: Mapped[UUID] = mapped_column(ForeignKey("departments.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    team_lead_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    department: Mapped[Department] = relationship(back_populates="teams")
+    members: Mapped[list["TeamMember"]] = relationship(back_populates="team", cascade="all, delete-orphan")
+
+
+class TeamMember(Base):
+    """User membership in teams."""
+    __tablename__ = "team_members"
+    __table_args__ = (UniqueConstraint("user_id", "team_id", name="uq_user_team"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    team: Mapped[Team] = relationship(back_populates="members")
+
+
+# ==== CAMPAIGN MANAGEMENT ====
+class Campaign(Base):
+    """Marketing campaigns."""
+    __tablename__ = "campaigns"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_campaign_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)  # "Google Ads", "Facebook", etc.
+    medium: Mapped[str | None] = mapped_column(String(100), nullable=True)  # "cpc", "organic", "social", etc.
+    utm_campaign: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_term: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    landing_page: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    budget: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    leads: Mapped[list[Lead]] = relationship("Lead")
+
+
+# ==== TASK & ACTIVITY SYSTEM ====
+class Task(Base):
+    """Tasks for follow-ups and activities."""
+    __tablename__ = "tasks"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50))  # "LEAD", "CLIENT", etc.
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_to_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    priority: Mapped[str] = mapped_column(String(20), default="NORMAL")  # LOW, NORMAL, HIGH, URGENT
+    status: Mapped[str] = mapped_column(String(50), default="PENDING")  # PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Activity(Base):
+    """Activity log for entities."""
+    __tablename__ = "activities"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # "LEAD", "CLIENT", etc.
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    activity_type: Mapped[str] = mapped_column(String(50))  # "EMAIL_SENT", "CALL", "NOTE", "STATUS_CHANGE", etc.
+    description: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Note(Base):
+    """Notes attached to entities."""
+    __tablename__ = "notes"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # "LEAD", "CLIENT", etc.
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ==== TAGS SYSTEM ====
+class Tag(Base):
+    """Tags for categorizing entities."""
+    __tablename__ = "tags"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_tag_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(50))
+    color: Mapped[str] = mapped_column(String(7), default="#6B7280")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EntityTag(Base):
+    """Tags applied to entities."""
+    __tablename__ = "entity_tags"
+    __table_args__ = (UniqueConstraint("entity_type", "entity_id", "tag_id", name="uq_entity_tag"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # "LEAD", "CLIENT", etc.
+    entity_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    tag_id: Mapped[UUID] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
