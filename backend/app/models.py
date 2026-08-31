@@ -237,6 +237,7 @@ class PaymentGateway(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key", name="uq_transaction_idempotency"),)
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
@@ -248,6 +249,7 @@ class Transaction(Base):
     gateway_id: Mapped[UUID | None] = mapped_column(ForeignKey("payment_gateways.id", ondelete="SET NULL"), nullable=True)
     payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
