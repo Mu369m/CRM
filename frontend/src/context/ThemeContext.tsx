@@ -7,38 +7,57 @@ type Theme = "light" | "dark";
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  isDark: boolean;
+  isLight: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("dark");
+  const [mounted, setMounted] = useState(false);
 
   const applyTheme = (newTheme: Theme) => {
     const root = document.documentElement;
-    root.classList.toggle("dark", newTheme === "dark");
-    root.classList.toggle("light", newTheme === "light");
+    root.classList.remove("light", "dark");
+    root.classList.add(newTheme);
     root.style.colorScheme = newTheme;
-    localStorage.setItem("app-theme", newTheme);
+    localStorage.setItem("theme", newTheme);
   };
 
   useEffect(() => {
-    const stored = localStorage.getItem("app-theme");
-    const preferredTheme: Theme = stored === "light" || stored === "dark" ? stored : "dark";
+    setMounted(true);
+    const stored = localStorage.getItem("theme") as Theme | null;
+    const systemPreference = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const preferredTheme: Theme = stored || systemPreference;
     setTheme(preferredTheme);
     applyTheme(preferredTheme);
   }, []);
 
   useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
+    if (mounted) {
+      applyTheme(theme);
+    }
+  }, [theme, mounted]);
 
   const toggleTheme = () => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
   };
 
+  // Prevent flash on initial load
+  if (!mounted) {
+    return <>{children}</>;
+  }
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        toggleTheme,
+        isDark: theme === "dark",
+        isLight: theme === "light",
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
