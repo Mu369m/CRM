@@ -12,6 +12,7 @@ from .auth_v1 import router as auth_v1_router
 from .api_byodb import router as byodb_router
 from .api.v1.owner.system_control import router as system_control_router
 from .api.v1.broker.settings import router as broker_settings_router
+from .api.v1.broker.integrations import router as integrations_router
 from .api.v1.broker.custom_fields import router as custom_fields_router
 from .api.v1.broker.pipelines import router as pipelines_router
 from .api.v1.broker.leads import router as leads_router
@@ -60,6 +61,7 @@ app.include_router(auth_v1_router)
 app.include_router(byodb_router)
 app.include_router(system_control_router)
 app.include_router(broker_settings_router)
+app.include_router(integrations_router)
 app.include_router(custom_fields_router)
 app.include_router(pipelines_router)
 app.include_router(leads_router)

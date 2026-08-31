@@ -51,3 +51,29 @@ class ManagerConnectionResponse(BaseModel):
     server: str
     login: str
     enabled: bool
+
+
+class IntegrationConfigCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=120)
+    provider: str = Field(min_length=1, max_length=80)
+    integration_type: str = Field(default="EXTERNAL", min_length=1, max_length=80)
+    enabled: bool = False
+    config_json: dict = Field(default_factory=dict)
+    credentials: dict | None = None
+
+
+class IntegrationConfigResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    tenant_id: UUID
+    name: str
+    provider: str
+    integration_type: str
+    status: str
+    enabled: bool
+    is_saas_managed: bool
+    config_json: dict
+    last_error: str | None = None
+    last_connected_at: str | None = None
+    masked_credentials: dict | None = None

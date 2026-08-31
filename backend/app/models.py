@@ -385,6 +385,65 @@ class TenantBranding(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="branding")
 
 
+class IntegrationProvider(StrEnum):
+    MT4 = "MT4"
+    MT5 = "MT5"
+    PAYMENT_GATEWAY = "PAYMENT_GATEWAY"
+    KYC_PROVIDER = "KYC_PROVIDER"
+    SMTP = "SMTP"
+    SMS = "SMS"
+    WHATSAPP = "WHATSAPP"
+    STORAGE = "STORAGE"
+    DATABASE = "DATABASE"
+    WEBHOOK = "WEBHOOK"
+    OTHER = "OTHER"
+
+
+class IntegrationStatus(StrEnum):
+    DISABLED = "DISABLED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    CONNECTED = "CONNECTED"
+    AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+    CONNECTION_FAILED = "CONNECTION_FAILED"
+    ERROR = "ERROR"
+
+
+class IntegrationConfig(Base):
+    __tablename__ = "integration_configs"
+    __table_args__ = (UniqueConstraint("tenant_id", "provider", "name", name="uq_integration_tenant_provider_name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    provider: Mapped[IntegrationProvider] = mapped_column()
+    integration_type: Mapped[str] = mapped_column(String(80), default="EXTERNAL")
+    status: Mapped[IntegrationStatus] = mapped_column(default=IntegrationStatus.NOT_CONFIGURED)
+    enabled: Mapped[bool] = mapped_column(default=False)
+    is_saas_managed: Mapped[bool] = mapped_column(default=False)
+    encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IntegrationEntitlement(Base):
+    __tablename__ = "integration_entitlements"
+    __table_args__ = (UniqueConstraint("tenant_id", "provider", "name", name="uq_integration_entitlement_scope"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    provider: Mapped[IntegrationProvider] = mapped_column()
+    global_available: Mapped[bool] = mapped_column(default=False)
+    broker_plan_allows: Mapped[bool] = mapped_column(default=False)
+    broker_enabled: Mapped[bool] = mapped_column(default=False)
+    user_permission: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class MTServerConfig(Base):
     __tablename__ = "mt_server_configs"
 
