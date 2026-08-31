@@ -73,7 +73,7 @@ export default function TraderCabinet() {
     <MainLayout><main className="cabinet-shell">
       <header className="cabinet-header">
         <div className="cabinet-brand"><span className="cabinet-logo">{branding?.companyName?.slice(0, 1) ?? "B"}</span><div><strong>{branding?.companyName ?? "Broker CRM"}</strong><span>Trader Cabinet</span></div></div>
-        <div className="cabinet-user"><span className="online-dot" /> Live session <span className="cabinet-avatar">TR</span></div>
+        <div className="cabinet-user"><button className="back-button" type="button" onClick={() => window.history.back()}><span className="button-arrow" aria-hidden="true">←</span> Back</button><span className="online-dot" /> Live session <span className="cabinet-avatar">TR</span></div>
       </header>
       <div className="cabinet-body">
         <aside className="cabinet-sidebar"><p className="cabinet-eyebrow">Account</p><a className="cabinet-nav active" href="/trader-cabinet">⌂ Overview</a><a className="cabinet-nav" href="/settings">⚙ Settings</a><div className="cabinet-support"><span>?</span><div><strong>Need help?</strong><small>{branding?.supportEmail ?? "Contact support"}</small></div></div></aside>

@@ -12,6 +12,23 @@ from .auth_v1 import router as auth_v1_router
 from .api_byodb import router as byodb_router
 from .api.v1.owner.system_control import router as system_control_router
 from .api.v1.broker.settings import router as broker_settings_router
+from .api.v1.broker.integrations import router as integrations_router
+from .api.v1.broker.custom_fields import router as custom_fields_router
+from .api.v1.broker.pipelines import router as pipelines_router
+from .api.v1.broker.leads import router as leads_router
+from .api.v1.broker.departments import router as departments_router
+from .api.v1.broker.teams import router as teams_router
+from .api.v1.broker.roles import router as roles_router
+from .api.v1.broker.clients import router as clients_router
+from .api.v1.broker.ibs import router as ibs_router
+from .api.v1.broker.deposits import router as deposits_router
+from .api.v1.broker.withdrawals import router as withdrawals_router
+from .api.v1.broker.documents import router as documents_router
+from .api.v1.broker.audit import router as audit_router
+from .api.v1.broker.ib_partners import router as ib_partners_router
+from .api.v1.broker.transactions import router as transactions_router
+from .api.v1.broker.kyc_documents import router as kyc_documents_router
+from .api.v1.broker.workflows import router as workflows_router
 from .api.v1.trader.accounts import router as trader_accounts_router
 from .api.v1.trader.dashboard import router as trader_dashboard_router
 from .api.v1.trader.profile import router as trader_profile_router
@@ -44,6 +61,23 @@ app.include_router(auth_v1_router)
 app.include_router(byodb_router)
 app.include_router(system_control_router)
 app.include_router(broker_settings_router)
+app.include_router(integrations_router)
+app.include_router(custom_fields_router)
+app.include_router(pipelines_router)
+app.include_router(leads_router)
+app.include_router(departments_router)
+app.include_router(teams_router)
+app.include_router(roles_router)
+app.include_router(clients_router)
+app.include_router(ibs_router)
+app.include_router(deposits_router)
+app.include_router(withdrawals_router)
+app.include_router(documents_router)
+app.include_router(audit_router)
+app.include_router(ib_partners_router)
+app.include_router(transactions_router)
+app.include_router(kyc_documents_router)
+app.include_router(workflows_router)
 app.include_router(trader_accounts_router)
 app.include_router(trader_dashboard_router)
 app.include_router(trader_profile_router)

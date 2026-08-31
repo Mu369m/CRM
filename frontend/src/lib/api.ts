@@ -5,8 +5,56 @@ export interface DashboardSummary {
   volume24h: number;
 }
 
+export interface PaymentMethod {
+  id?: string;
+  method: string;
+  network: string;
+  asset: string;
+  chain_id?: string | null;
+  contract_address?: string | null;
+  deposit_address?: string | null;
+  qr_code_url?: string | null;
+  account_details?: Record<string, string>;
+  min_deposit: number | string;
+  max_deposit?: number | string | null;
+  min_withdrawal: number | string;
+  processing_fee: number | string;
+  is_active_broker: boolean;
+}
+
+export interface MasterPaymentControl {
+  id?: string;
+  tenant_id?: string | null;
+  method: string;
+  network: string;
+  asset: string;
+  is_active_master: boolean;
+}
+
 export interface ApiError {
-  detail: string;
+  detail?: string;
+  message?: string;
+}
+
+async function parseApiResponse(response: Response): Promise<unknown> {
+  const rawText = await response.text();
+  if (!rawText.trim()) return {};
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const looksLikeJson = contentType.includes("application/json") || rawText.trim().startsWith("{") || rawText.trim().startsWith("[");
+
+  if (!looksLikeJson) {
+    if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
+      throw new Error("API unavailable: the backend returned an HTML page instead of JSON.");
+    }
+    throw new Error(rawText.trim() || response.statusText || "Request failed.");
+  }
+
+  try {
+    return JSON.parse(rawText) as unknown;
+  } catch {
+    throw new Error("API unavailable: the server response was not valid JSON.");
+  }
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -16,11 +64,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(tenantHost ? { "X-Tenant-Host": tenantHost } : {}), ...init.headers },
   });
-  if (!response.ok) {
-    const error = (await response.json().catch(() => ({ detail: response.statusText }))) as ApiError;
-    throw new Error(error.detail);
+
+  try {
+    const payload = await parseApiResponse(response);
+    if (!response.ok) {
+      const error = payload as Partial<ApiError>;
+      throw new Error(error.detail ?? error.message ?? response.statusText ?? "Request failed.");
+    }
+    return payload as T;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Request failed.");
   }
-  return response.json() as Promise<T>;
 }
 
 export const crmApi = {
@@ -43,8 +100,10 @@ export const crmApi = {
   ibWithdraw: (body: { amount: string; destination: string }) => request<unknown>("/api/v1/trader/ib/withdraw", { method: "POST", body: JSON.stringify(body) }),
   tradeHistory: () => request<HistoryPage>("/api/v1/trader/history"),
   cryptoDeposit: (body: { amount: string }, idempotencyKey: string) => request<{ id: string; status: string; address: string; network: string; qr_code: string }>("/api/v1/trader/finance/deposit/crypto", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) }),
-  paymentWithdraw: (body: { amount: string; destination: string }, idempotencyKey: string) => request<unknown>("/api/v1/trader/finance/withdraw", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) }),
-};
+  paymentWithdraw: (body: { amount: string; destination: string }, idempotencyKey: string) => request<unknown>("/api/v1/trader/finance/withdraw", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) }),  brokerPaymentMethods: () => request<PaymentMethod[]>('/api/v1/broker/payments/methods'),
+  saveBrokerPaymentMethod: (body: PaymentMethod) => request<PaymentMethod>('/api/v1/broker/payments/methods', { method: 'PUT', body: JSON.stringify(body) }),
+  masterPaymentControls: () => request<MasterPaymentControl[]>('/api/v1/owner/payments/controls'),
+  saveMasterPaymentControl: (body: MasterPaymentControl) => request<MasterPaymentControl>('/api/v1/owner/payments/controls', { method: 'PUT', body: JSON.stringify(body) }),};
 
 export interface Portfolio { balance: string; equity: string; used_margin: string; free_margin: string; floating_pnl: string; accounts: Array<{ id: string; platform: string; login: string; server: string; leverage: number; is_demo: boolean; is_locked: boolean; status: string }> }
 export interface Position { id: string; account_id: string; symbol: string; side: string; volume: string; open_price: string; current_price: string; floating_pnl: string; opened_at: string }
