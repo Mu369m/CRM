@@ -9,7 +9,6 @@ This service enforces the final architecture rule:
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -118,7 +117,7 @@ async def create_integration(
     )
 
 
-@router.get("/{integration_id}", response_model=IntegrationConfigResponse)
+@router.get("/{integration_id:uuid}", response_model=IntegrationConfigResponse)
 async def get_integration(
     integration_id: UUID,
     claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.FINANCE, Role.COMPLIANCE)),
@@ -149,7 +148,7 @@ async def get_integration(
     )
 
 
-@router.post("/{integration_id}/test-connection")
+@router.post("/{integration_id:uuid}/test-connection")
 async def test_integration_connection(
     integration_id: UUID,
     claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN)),
@@ -173,19 +172,18 @@ async def test_integration_connection(
         decrypted = decrypt_field(integration.encrypted_credentials)
         if not decrypted or decrypted == "{}":
             raise ValueError("Credentials missing")
-        integration.status = IntegrationStatus.CONNECTED
-        integration.last_error = None
-        integration.last_connected_at = datetime.utcnow()
+        integration.status = IntegrationStatus.ERROR
+        integration.last_error = "Provider health check is not configured for this integration"
         await db.commit()
-        return {"status": IntegrationStatus.CONNECTED.value, "message": "Connection successful"}
-    except Exception as exc:  # pragma: no cover - safe fallback for provider validation layer
+        return {"status": IntegrationStatus.ERROR.value, "message": "Provider health check is not configured"}
+    except Exception:  # pragma: no cover - safe fallback for provider validation layer
         integration.status = IntegrationStatus.CONNECTION_FAILED
         integration.last_error = "Connection failed. Please verify credentials and provider settings."
         await db.commit()
         return {"status": IntegrationStatus.CONNECTION_FAILED.value, "message": "Connection failed. Please verify credentials and provider settings."}
 
 
-@router.patch("/{integration_id}/enable")
+@router.patch("/{integration_id:uuid}/enable")
 async def enable_integration(
     integration_id: UUID,
     enabled: bool = True,
@@ -198,12 +196,15 @@ async def enable_integration(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
     integration.enabled = enabled
-    integration.status = IntegrationStatus.CONNECTED if enabled and integration.status == IntegrationStatus.NOT_CONFIGURED else integration.status
+    if enabled and integration.status != IntegrationStatus.CONNECTED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Integration must pass a connection test before activation")
+    if not enabled:
+        integration.status = IntegrationStatus.DISABLED
     await db.commit()
     return {"id": str(integration.id), "enabled": integration.enabled, "status": integration.status.value}
 
 
-@router.delete("/{integration_id}")
+@router.delete("/{integration_id:uuid}")
 async def delete_integration(
     integration_id: UUID,
     claims: dict[str, str] = Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN)),

@@ -16,12 +16,15 @@ from pydantic import BaseModel, Field, EmailStr
 from app.db import get_tenant_db
 from app.security import current_claims
 from app.models import (
+    Campaign,
     Client,
     ClientAccount,
     ClientFinancials,
+    IbPartner,
     Task,
     Note,
     Activity,
+    User,
 )
 from app.middleware.permission_check import check_permission
 
@@ -36,6 +39,7 @@ class ClientCreate(BaseModel):
     email: EmailStr
     phone: Optional[str] = None
     country: Optional[str] = None
+    assigned_user_id: Optional[UUID] = None
     trading_platform: Optional[str] = None
     account_type: Optional[str] = None
     source: Optional[str] = None
@@ -170,6 +174,13 @@ async def create_client(
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    if payload.assigned_user_id and not await db.scalar(select(User).where(User.id == payload.assigned_user_id, User.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="Assigned user is invalid for this tenant")
+    if payload.campaign_id and not await db.scalar(select(Campaign).where(Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="Campaign is invalid for this tenant")
+    if payload.ib_partner_id and not await db.scalar(select(IbPartner).where(IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="IB partner is invalid for this tenant")
     
     # Check if email already exists
     result = await db.execute(
@@ -190,6 +201,7 @@ async def create_client(
         email=payload.email,
         phone=payload.phone,
         country=payload.country,
+        assigned_user_id=payload.assigned_user_id,
         trading_platform=payload.trading_platform,
         account_type=payload.account_type,
         source=payload.source,
@@ -360,6 +372,13 @@ async def update_client(
     
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    if payload.assigned_user_id and not await db.scalar(select(User).where(User.id == payload.assigned_user_id, User.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="Assigned user is invalid for this tenant")
+    if payload.campaign_id and not await db.scalar(select(Campaign).where(Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="Campaign is invalid for this tenant")
+    if payload.ib_partner_id and not await db.scalar(select(IbPartner).where(IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id)):
+        raise HTTPException(status_code=400, detail="IB partner is invalid for this tenant")
     
     # Track changes
     changes = []

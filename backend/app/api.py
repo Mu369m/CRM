@@ -6,12 +6,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db, get_redis
 from .core.db_router import get_tenant_db
 from .crypto import decrypt_field, encrypt_field
-from .models import AuditLog, BonusRule, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, Tenant, TenantBranding, TenantSettings, TradingAccount, User, Wallet
+from .models import AuditLog, BonusRule, Client, IbPartner, KycDocument, KycRequirement, LedgerEntry, ManagerConnection, MoneyRequest, RebateRule, Role, Tenant, TenantBranding, TenantSettings, TradingAccount, User, Wallet
 from .schemas import LoginRequest, LedgerEntryResponse, TokenResponse, UserResponse, WalletAdjustment, WalletResponse
 from .security import create_access_token, new_totp_secret, require_roles, verify_password, verify_totp
 from .workflow_schemas import KycReview, KycSubmission, MoneyRequestCreate, MoneyRequestResponse, TwoFactorSetupResponse, TwoFactorVerifyRequest, TradingAccountCreate
@@ -127,9 +128,20 @@ async def create_money_request(payload: MoneyRequestCreate, claims: dict[str, st
 @router.post("/trading-accounts", response_model=dict)
 async def register_trading_account(payload: TradingAccountCreate, claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Persist normalized external account identity before connector synchronization."""
-    account = TradingAccount(tenant_id=UUID(claims["tenant_id"]), user_id=UUID(claims["sub"]), **payload.model_dump())
+    tenant_id = UUID(claims["tenant_id"])
+    existing = await db.scalar(select(TradingAccount).where(TradingAccount.tenant_id == tenant_id, TradingAccount.platform == payload.platform, TradingAccount.external_login == payload.external_login, TradingAccount.server == payload.server))
+    if existing:
+        return {"id": existing.id, "platform": existing.platform, "external_login": existing.external_login, "status": existing.provisioning_status}
+    account = TradingAccount(tenant_id=tenant_id, user_id=UUID(claims["sub"]), **payload.model_dump())
     db.add(account)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.scalar(select(TradingAccount).where(TradingAccount.tenant_id == tenant_id, TradingAccount.platform == payload.platform, TradingAccount.external_login == payload.external_login, TradingAccount.server == payload.server))
+        if not existing:
+            raise HTTPException(status_code=409, detail="Unable to safely resolve duplicate trading account")
+        return {"id": existing.id, "platform": existing.platform, "external_login": existing.external_login, "status": existing.provisioning_status}
     await db.refresh(account)
     return {"id": account.id, "platform": account.platform, "external_login": account.external_login, "status": "PENDING_SYNC"}
 
@@ -138,10 +150,11 @@ async def register_trading_account(payload: TradingAccountCreate, claims: dict[s
 async def operations_summary(claims: dict[str, str] = Depends(require_roles(*list(Role))), db: AsyncSession = Depends(get_tenant_db)):
     """Return tenant-scoped operational counts for the executive dashboard."""
     tenant_id = UUID(claims["tenant_id"])
+    clients = await db.scalar(select(func.count(Client.id)).where(Client.tenant_id == tenant_id))
     traders = await db.scalar(select(func.count(User.id)).where(User.tenant_id == tenant_id, User.role == Role.TRADER))
     pending_kyc = await db.scalar(select(func.count(KycDocument.id)).where(KycDocument.tenant_id == tenant_id, KycDocument.status == "PENDING"))
     pending_money = await db.scalar(select(func.count(MoneyRequest.id)).where(MoneyRequest.tenant_id == tenant_id, MoneyRequest.status == "PENDING"))
-    return {"active_traders": traders or 0, "pending_kyc": pending_kyc or 0, "pending_treasury": pending_money or 0}
+    return {"clients": clients or 0, "active_traders": traders or 0, "pending_kyc": pending_kyc or 0, "pending_treasury": pending_money or 0}
 
 
 @router.get("/kyc/queue")

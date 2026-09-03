@@ -191,7 +191,7 @@ class KycDocument(Base):
 
 class TradingAccount(Base):
     __tablename__ = "trading_accounts"
-    __table_args__ = (UniqueConstraint("platform", "external_login", "server", name="uq_trading_account_external"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "platform", "external_login", "server", name="uq_trading_account_tenant_external"),)
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
@@ -208,7 +208,7 @@ class TradingAccount(Base):
 
 class MoneyRequest(Base):
     __tablename__ = "money_requests"
-    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_money_request_idempotency"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key", name="uq_money_request_tenant_idempotency"),)
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
@@ -218,7 +218,7 @@ class MoneyRequest(Base):
     currency: Mapped[str] = mapped_column(String(3))
     status: Mapped[RequestStatus] = mapped_column(default=RequestStatus.PENDING)
     provider_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
-    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -249,7 +249,7 @@ class Transaction(Base):
     gateway_id: Mapped[UUID | None] = mapped_column(ForeignKey("payment_gateways.id", ondelete="SET NULL"), nullable=True)
     payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -868,6 +868,7 @@ class ClientFinancials(Base):
 class IBPartner(Base):
     """IB/Affiliate partner managing client referrals."""
     __tablename__ = "ib_partners"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
@@ -1159,6 +1160,7 @@ class DocumentType(Base):
 class KYCDocument(Base):
     """Client KYC documents."""
     __tablename__ = "kyc_documents"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)

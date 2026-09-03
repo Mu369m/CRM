@@ -5,7 +5,6 @@ Allows brokers to create custom roles and manage permissions.
 """
 
 from uuid import UUID
-from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -51,10 +50,9 @@ class DynamicRoleResponse(BaseModel):
     tenant_id: UUID
     name: str
     description: Optional[str]
-    is_default: bool
-    permission_count: int
+    is_system: bool
+    permission_count: int = 0
     created_at: datetime
-    updated_at: datetime
 
     class Config:
         from_attributes = True
@@ -63,9 +61,9 @@ class DynamicRoleResponse(BaseModel):
 class PermissionResponse(BaseModel):
     id: UUID
     tenant_id: UUID
-    name: str
+    code: str
     description: Optional[str]
-    resource: str
+    module: str
     action: str
     created_at: datetime
 
@@ -100,7 +98,7 @@ async def create_role(
         tenant_id=tenant_id,
         name=payload.name,
         description=payload.description,
-        is_default=False,
+        is_system=False,
     )
     
     db.add(role)
@@ -118,6 +116,9 @@ async def list_roles(
     """List all roles for tenant"""
     
     tenant_id = UUID(claims["tenant_id"])
+
+    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(DynamicRole).where(DynamicRole.tenant_id == tenant_id)
@@ -134,6 +135,9 @@ async def get_role(
     """Get role with permissions"""
     
     tenant_id = UUID(claims["tenant_id"])
+
+    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(DynamicRole).where(
@@ -150,6 +154,7 @@ async def get_role(
         select(DynamicPermission)
         .join(RolePermission)
         .where(RolePermission.role_id == role_id)
+        .where(DynamicPermission.tenant_id == tenant_id)
     )
     permissions = result.scalars().all()
     
@@ -198,7 +203,6 @@ async def update_role(
     for key, value in update_data.items():
         setattr(role, key, value)
     
-    role.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(role)
     
@@ -232,7 +236,7 @@ async def delete_role(
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     
-    if role.is_default:
+    if role.is_system:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete default roles"
@@ -252,6 +256,9 @@ async def get_available_permissions(
     """Get all available permissions"""
     
     tenant_id = UUID(claims["tenant_id"])
+
+    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     
     result = await db.execute(
         select(DynamicPermission).where(DynamicPermission.tenant_id == tenant_id)

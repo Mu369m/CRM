@@ -167,53 +167,29 @@ class WorkflowExecutor:
         elif action_type == "send_email":
             return await WorkflowExecutor._action_send_email(action_config, entity_data)
         else:
-            return {"status": "unknown_action", "action_type": action_type}
+            raise ValueError(f"Unsupported workflow action: {action_type}")
 
     @staticmethod
     async def _action_send_notification(config: dict, entity_data: dict) -> dict:
         """Send a notification action."""
-        # Placeholder for notification sending
-        return {
-            "status": "notification_sent",
-            "recipient": config.get("recipient_id"),
-            "message": config.get("message", ""),
-        }
+        raise NotImplementedError("Notification delivery is not configured")
 
     @staticmethod
     async def _action_assign_lead(config: dict, entity_data: dict, db: AsyncSession) -> dict:
         """Assign lead to a user action."""
-        # Placeholder for lead assignment
-        return {
-            "status": "lead_assigned",
-            "assigned_to": config.get("user_id"),
-        }
+        raise NotImplementedError("Lead assignment action is not implemented")
 
     @staticmethod
     async def _action_create_task(config: dict, entity_data: dict) -> dict:
         """Create a task action."""
-        # Placeholder for task creation
-        return {
-            "status": "task_created",
-            "title": config.get("task_title", ""),
-            "due_date": config.get("due_date", ""),
-        }
+        raise NotImplementedError("Task creation action is not implemented")
 
     @staticmethod
     async def _action_update_field(config: dict, entity_data: dict) -> dict:
         """Update an entity field action."""
-        # Placeholder for field update
-        return {
-            "status": "field_updated",
-            "field": config.get("field_name"),
-            "value": config.get("field_value"),
-        }
+        raise NotImplementedError("Field update action is not implemented")
 
     @staticmethod
     async def _action_send_email(config: dict, entity_data: dict) -> dict:
         """Send email action."""
-        # Placeholder for email sending
-        return {
-            "status": "email_sent",
-            "to": config.get("recipient_email"),
-            "subject": config.get("subject", ""),
-        }
+        raise NotImplementedError("Email delivery is not configured")

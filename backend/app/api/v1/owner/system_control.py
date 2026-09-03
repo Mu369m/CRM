@@ -87,7 +87,7 @@ async def get_owner_broadcast(
 ) -> BroadcastResponse | None:
     """Return the active global banner for the authenticated master owner."""
     response.headers["Cache-Control"] = "private, max-age=5, stale-while-revalidate=15"
-    broadcast = await db.scalar(select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True)).order_by(SystemBroadcast.updated_at.desc()))
+    broadcast = await db.scalar(select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True), SystemBroadcast.target_brokers == BroadcastTarget.ALL_BROKERS.value).order_by(SystemBroadcast.updated_at.desc()))
     return _response(broadcast) if broadcast else None
 
 

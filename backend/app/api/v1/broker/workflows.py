@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.middleware.audit_logger import AuditLogger
 from app.middleware.rbac_enforcer import require_permission
+from app.security import current_claims
 from app.models import (
     Workflow,
     WorkflowAction,
@@ -136,6 +137,7 @@ async def create_workflow(
     payload: WorkflowCreateSchema,
     db: AsyncSession = Depends(get_db),
     tenant_id: UUID = Depends(get_tenant_id),
+    claims: dict[str, str] = Depends(current_claims),
     _=Depends(require_permission("workflows.create")),
 ) -> WorkflowResponseSchema:
     """Create a new workflow."""
@@ -156,7 +158,7 @@ async def create_workflow(
             entity_type=payload.entity_type,
             trigger_type=payload.trigger_type,
             trigger_config=payload.trigger_config,
-            created_by=payload.created_by,
+            created_by=UUID(claims["sub"]),
         )
         db.add(workflow)
         await db.flush()
@@ -193,9 +195,9 @@ async def create_workflow(
         return WorkflowResponseSchema.model_validate(workflow)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to create workflow")
 
 
 @router.get("", response_model=list[WorkflowResponseSchema])
@@ -327,6 +329,10 @@ async def update_workflow_action(
     _=Depends(require_permission("workflows.edit")),
 ) -> WorkflowActionResponseSchema:
     """Update a workflow action."""
+    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     action = await db.execute(
         select(WorkflowAction).where(
             and_(
@@ -357,6 +363,10 @@ async def delete_workflow_action(
     _=Depends(require_permission("workflows.edit")),
 ):
     """Delete a workflow action."""
+    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     action = await db.execute(
         select(WorkflowAction).where(
             and_(
@@ -414,6 +424,10 @@ async def delete_workflow_condition(
     _=Depends(require_permission("workflows.edit")),
 ):
     """Delete a workflow condition."""
+    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
     condition = await db.execute(
         select(WorkflowCondition).where(
             and_(

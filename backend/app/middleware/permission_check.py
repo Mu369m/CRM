@@ -4,7 +4,6 @@ Permission checking middleware and utilities.
 Enforces RBAC on all broker endpoints.
 """
 
-from typing import Optional
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,10 +43,7 @@ async def check_permission(
     
     # Get all roles for user
     result = await db.execute(
-        select(UserDynamicRole).where(
-            (UserDynamicRole.user_id == user_id)
-            & (UserDynamicRole.tenant_id == tenant_id)
-        )
+        select(UserDynamicRole).join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id).where((UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id))
     )
     user_roles = result.scalars().all()
     
@@ -65,7 +61,7 @@ async def check_permission(
         .join(DynamicPermission)
         .where(
             (RolePermission.role_id.in_(role_ids))
-            & (DynamicPermission.name == permission_name)
+            & (DynamicPermission.code == permission_name)
             & (DynamicPermission.tenant_id == tenant_id)
         )
     )
@@ -87,10 +83,7 @@ async def get_user_permissions(
     
     # Get user's roles
     result = await db.execute(
-        select(UserDynamicRole).where(
-            (UserDynamicRole.user_id == user_id)
-            & (UserDynamicRole.tenant_id == tenant_id)
-        )
+        select(UserDynamicRole).join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id).where((UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id))
     )
     user_roles = result.scalars().all()
     
@@ -110,7 +103,7 @@ async def get_user_permissions(
     )
     
     permissions = result.scalars().all()
-    return {p.name for p in permissions}
+    return {p.code for p in permissions}
 
 
 # Standard permission names

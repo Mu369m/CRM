@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ....config import get_settings
 from ....core.db_router import get_tenant_db, get_tenant_engine
@@ -35,7 +36,14 @@ async def crypto_deposit(payload: dict[str, str], claims: Claims, db: AsyncSessi
         raise HTTPException(status_code=503, detail="Crypto gateway is not configured")
     request = MoneyRequest(tenant_id=UUID(claims["tenant_id"]), user_id=UUID(claims["sub"]), kind="DEPOSIT", amount=amount, currency="USDT", status=RequestStatus.PENDING, provider_reference=gateway.config_json["wallet_address"], idempotency_key=x_idempotency_key)
     db.add(request)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.scalar(select(MoneyRequest).where(MoneyRequest.idempotency_key == x_idempotency_key, MoneyRequest.tenant_id == UUID(claims["tenant_id"])))
+        if not existing:
+            raise HTTPException(status_code=409, detail="Unable to safely resolve duplicate deposit request")
+        return {"id": existing.id, "status": existing.status, "address": existing.provider_reference, "network": "TRC20"}
     return {"id": request.id, "status": request.status, "address": request.provider_reference, "network": gateway.config_json.get("network", "TRC20"), "qr_code": f"https://quickchart.io/qr?text={request.provider_reference}"}
 
 
@@ -55,7 +63,14 @@ async def withdraw(payload: dict[str, str], claims: Claims, db: AsyncSession = D
     db.add(request)
     await db.flush()
     db.add(LedgerEntry(wallet_id=wallet.id, entry_type="WITHDRAWAL", amount=-amount, reference=f"withdrawal:{request.id}", note="Withdrawal hold"))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.scalar(select(MoneyRequest).where(MoneyRequest.idempotency_key == x_idempotency_key, MoneyRequest.tenant_id == UUID(claims["tenant_id"])))
+        if not existing:
+            raise HTTPException(status_code=409, detail="Unable to safely resolve duplicate withdrawal request")
+        return {"id": existing.id, "status": existing.status}
     return {"id": request.id, "status": request.status, "amount": amount}
 
 

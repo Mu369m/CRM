@@ -36,10 +36,13 @@ def require_permission(*permissions: str):
         
         # Check if user has ANY of the required permissions
         for permission in permissions:
+            parts = permission.split(".", 1)
+            if len(parts) != 2 or not all(parts):
+                continue
             has_perm = await check_permission(
                 user_id, 
-                permission.split(".")[0],  # resource
-                permission.split(".")[1],  # action
+                parts[0],  # resource
+                parts[1],  # action
                 db, 
                 tenant_id
             )
