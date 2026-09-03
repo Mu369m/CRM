@@ -44,11 +44,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
   };
 
-  // Prevent flash on initial load
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
   return (
     <ThemeContext.Provider
       value={{
@@ -58,7 +53,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         isLight: theme === "light",
       }}
     >
-      {children}
+      <div style={{ visibility: mounted ? "visible" : "hidden" }}>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }
