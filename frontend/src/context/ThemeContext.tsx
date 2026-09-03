@@ -4,6 +4,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 type Theme = "light" | "dark";
 
+function isTheme(value: string | null): value is Theme {
+  return value === "light" || value === "dark";
+}
+
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
@@ -27,9 +31,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    const stored = localStorage.getItem("theme") as Theme | null;
+    const stored = localStorage.getItem("theme");
     const systemPreference = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const preferredTheme: Theme = stored || systemPreference;
+    const preferredTheme: Theme = isTheme(stored) ? stored : systemPreference;
     setTheme(preferredTheme);
     applyTheme(preferredTheme);
   }, []);
