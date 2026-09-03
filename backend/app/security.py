@@ -13,7 +13,7 @@ from .config import get_settings
 from .models import Role
 
 _hasher = PasswordHasher()
-_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def hash_password(password: str) -> str:
