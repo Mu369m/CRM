@@ -13,6 +13,7 @@ import MainLayout from "@/components/navigation/MainLayout";
 
 type Kind = "DATABASE" | "STORAGE";
 type Mode = "SAAS" | "EXTERNAL";
+type ProviderOption = { id: string; name: string; mode: Mode; engine?: string };
 
 type Infrastructure = {
   mode: Mode;
@@ -90,6 +91,7 @@ function InfrastructureCard({
     password: "",
   });
   const [current, setCurrent] = useState<Infrastructure | null>(null);
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
   const token =
@@ -99,6 +101,14 @@ function InfrastructureCard({
 
   useEffect(() => {
     if (!token) return;
+    fetch(`${api}/api/v1/broker/infrastructure/providers?kind=${kind}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<ProviderOption[]>) : [],
+      )
+      .then(setProviders)
+      .catch(() => onMessage(`Unable to load ${title.toLowerCase()} options.`));
     fetch(`${api}/api/v1/broker/infrastructure/${kind}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -123,6 +133,10 @@ function InfrastructureCard({
         onMessage(`Unable to load ${title.toLowerCase()} configuration.`),
       );
   }, [kind, onMessage, title, token]);
+
+  const externalAllowed = providers.some(
+    (option) => option.mode === "EXTERNAL",
+  );
 
   const update = (key: keyof typeof config, value: string) =>
     setConfig((old) => ({ ...old, [key]: value }));
@@ -228,13 +242,15 @@ function InfrastructureCard({
         >
           SaaS managed
         </button>
-        <button
-          type="button"
-          onClick={() => setMode("EXTERNAL")}
-          className={`rounded px-3 py-2 text-xs ${mode === "EXTERNAL" ? "bg-cyan-400/15 text-cyan-200" : "text-slate-500"}`}
-        >
-          Own service
-        </button>
+        {externalAllowed && (
+          <button
+            type="button"
+            onClick={() => setMode("EXTERNAL")}
+            className={`rounded px-3 py-2 text-xs ${mode === "EXTERNAL" ? "bg-cyan-400/15 text-cyan-200" : "text-slate-500"}`}
+          >
+            Own service
+          </button>
+        )}
       </div>
       {mode === "SAAS" ? (
         <div className="rounded-md border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400">
@@ -254,7 +270,13 @@ function InfrastructureCard({
               onChange={(event) => setProvider(event.target.value)}
               className="mt-2 w-full rounded border border-slate-700 bg-[#080D17] px-3 py-2 text-sm text-white"
             >
-              <option value="POSTGRES">PostgreSQL</option>
+              {providers
+                .filter((option) => option.mode === "EXTERNAL")
+                .map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
             </select>
           </label>
           <div className="grid grid-cols-3 gap-3">

@@ -119,9 +119,27 @@ def _response(row: InfrastructureConfig | None) -> InfrastructureResponse | None
 
 @router.get("/providers")
 async def list_providers(
+    claims: BrokerClaims,
+    db: AsyncSession = Depends(get_tenant_db),
     kind: InfrastructureKind | None = None,
 ) -> dict[str, list[dict]] | list[dict]:
-    return PROVIDERS[kind] if kind else PROVIDERS
+    tenant = await db.scalar(
+        select(Tenant).where(Tenant.id == UUID(claims["tenant_id"]))
+    )
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    kinds = [kind] if kind else list(PROVIDERS)
+    visible: dict[str, list[dict]] = {}
+    for provider_kind in kinds:
+        visible[provider_kind] = [
+            provider
+            for provider in PROVIDERS[provider_kind]
+            if get_infrastructure_entitlement(
+                tenant.plan, provider_kind, provider["mode"]
+            ).allowed
+        ]
+    return visible[kind] if kind else visible
 
 
 @router.get("/{kind}", response_model=InfrastructureResponse | None)
