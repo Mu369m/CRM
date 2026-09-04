@@ -697,8 +697,8 @@ class InfrastructureConfig(Base):
     engine: Mapped[str | None] = mapped_column(String(40), nullable=True)
     config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[IntegrationStatus] = mapped_column(
-        default=IntegrationStatus.NOT_CONFIGURED
+    status: Mapped[str] = mapped_column(
+        String(40), default=IntegrationStatus.NOT_CONFIGURED.value
     )
     active: Mapped[bool] = mapped_column(default=False)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)

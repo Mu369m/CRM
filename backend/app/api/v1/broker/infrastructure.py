@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.db_router import get_tenant_db
@@ -198,6 +198,9 @@ async def configure_infrastructure(
             status=result_status.value,
             active=False,
             last_error=error,
+            last_verified_at=func.now()
+            if result_status == IntegrationStatus.CONNECTED
+            else None,
         )
         db.add(row)
     else:
@@ -208,6 +211,9 @@ async def configure_infrastructure(
         )
         row.config_json, row.encrypted_credentials = payload.config_json, encrypted
         row.status, row.last_error = result_status.value, error
+        row.last_verified_at = (
+            func.now() if result_status == IntegrationStatus.CONNECTED else None
+        )
         row.active = False
     await AuditLogger.log_update(
         db,
