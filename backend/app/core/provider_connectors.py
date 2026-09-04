@@ -46,7 +46,8 @@ async def test_provider_connection(
         endpoint = str(config.get("healthcheck_url", "")).strip()
         if not endpoint.startswith(("https://", "http://")):
             return ConnectionResult(
-                IntegrationStatus.ERROR, "A valid provider health-check URL is required"
+                IntegrationStatus.INVALID_CONFIGURATION,
+                "A valid provider health-check URL is required",
             )
         token = credentials.get("access_token") or credentials.get("api_key")
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -55,28 +56,29 @@ async def test_provider_connection(
                 response = await client.get(endpoint, headers=headers)
             if response.status_code in (401, 403):
                 return ConnectionResult(
-                    IntegrationStatus.AUTHENTICATION_REQUIRED,
+                    IntegrationStatus.INVALID_CREDENTIALS,
                     "Provider rejected the supplied credentials",
                 )
             if response.status_code >= 500:
                 return ConnectionResult(
-                    IntegrationStatus.ERROR, "Provider is temporarily unavailable"
+                    IntegrationStatus.PROVIDER_UNAVAILABLE,
+                    "Provider is temporarily unavailable",
                 )
             if response.is_success:
                 return ConnectionResult(
                     IntegrationStatus.CONNECTED, "Connection successful"
                 )
             return ConnectionResult(
-                IntegrationStatus.CONNECTION_FAILED,
+                IntegrationStatus.PERMISSION_DENIED,
                 "Provider rejected the connection request",
             )
         except httpx.TimeoutException:
             return ConnectionResult(
-                IntegrationStatus.CONNECTION_FAILED, "Provider connection timed out"
+                IntegrationStatus.TIMEOUT, "Provider connection timed out"
             )
         except httpx.RequestError:
             return ConnectionResult(
-                IntegrationStatus.CONNECTION_FAILED, "Provider could not be reached"
+                IntegrationStatus.PROVIDER_UNAVAILABLE, "Provider could not be reached"
             )
 
     if provider.upper() in {"POSTGRES", "POSTGRESQL"}:
@@ -96,16 +98,17 @@ async def test_provider_connection(
             )
         except (KeyError, TypeError, ValueError):
             return ConnectionResult(
-                IntegrationStatus.ERROR, "Database connection settings are incomplete"
+                IntegrationStatus.INVALID_CONFIGURATION,
+                "Database connection settings are incomplete",
             )
         except asyncpg.InvalidPasswordError:
             return ConnectionResult(
-                IntegrationStatus.AUTHENTICATION_REQUIRED,
+                IntegrationStatus.INVALID_CREDENTIALS,
                 "Database rejected the supplied credentials",
             )
         except (asyncpg.PostgresError, OSError, TimeoutError):
             return ConnectionResult(
-                IntegrationStatus.CONNECTION_FAILED, "Database could not be reached"
+                IntegrationStatus.PROVIDER_UNAVAILABLE, "Database could not be reached"
             )
 
     return ConnectionResult(

@@ -22,8 +22,16 @@ from typing import Any
 class IntegrationStatus(StrEnum):
     DISABLED = "DISABLED"
     NOT_CONFIGURED = "NOT_CONFIGURED"
+    TESTING = "TESTING"
     CONNECTED = "CONNECTED"
+    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+    PERMISSION_DENIED = "PERMISSION_DENIED"
+    INVALID_CONFIGURATION = "INVALID_CONFIGURATION"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    TIMEOUT = "TIMEOUT"
+    EXPIRED_CREDENTIAL = "EXPIRED_CREDENTIAL"
     AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+    CONNECTION_ERROR = "CONNECTION_ERROR"
     CONNECTION_FAILED = "CONNECTION_FAILED"
     ERROR = "ERROR"
 
@@ -74,7 +82,9 @@ def can_use_integration(
         )
 
     if None in (broker_plan_allows, broker_enabled, user_permission):
-        raise ValueError("broker_plan_allows, broker_enabled, and user_permission are required")
+        raise ValueError(
+            "broker_plan_allows, broker_enabled, and user_permission are required"
+        )
 
     return (
         bool(global_available)
@@ -100,7 +110,9 @@ def integration_scope_ok(broker_id: Any, integration_broker_id: Any) -> bool:
     return str(broker_id) == str(integration_broker_id)
 
 
-def status_from_connection_result(success: bool, *, authentication_required: bool = False) -> IntegrationStatus:
+def status_from_connection_result(
+    success: bool, *, authentication_required: bool = False
+) -> IntegrationStatus:
     """Map provider result to a safe connection status enum."""
     if success:
         return IntegrationStatus.CONNECTED
