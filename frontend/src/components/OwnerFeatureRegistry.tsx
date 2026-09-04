@@ -53,7 +53,14 @@ export default function OwnerFeatureRegistry() {
     feature_id: "",
     tenant_id: "",
     status: "ENABLED",
+    starts_at: "",
+    ends_at: "",
+    configuration: "{}",
   });
+
+  const selectedFeature = features.find(
+    (feature) => feature.id === grantForm.feature_id,
+  );
 
   async function loadFeatures() {
     setLoading(true);
@@ -143,6 +150,19 @@ export default function OwnerFeatureRegistry() {
     event.preventDefault();
     if (!grantForm.feature_id || !grantForm.tenant_id)
       return setMessage("Feature and tenant ID are required.");
+    let configuration: Record<string, unknown>;
+    try {
+      configuration = JSON.parse(grantForm.configuration) as Record<
+        string,
+        unknown
+      >;
+      if (!configuration || Array.isArray(configuration))
+        throw new Error("Configuration must be a JSON object.");
+    } catch (error) {
+      return setMessage(
+        error instanceof Error ? error.message : "Invalid JSON configuration.",
+      );
+    }
     setSaving(true);
     try {
       const response = await fetch(
@@ -156,7 +176,13 @@ export default function OwnerFeatureRegistry() {
           body: JSON.stringify({
             tenant_id: grantForm.tenant_id,
             status: grantForm.status,
-            configuration: {},
+            configuration,
+            starts_at: grantForm.starts_at
+              ? new Date(grantForm.starts_at).toISOString()
+              : null,
+            ends_at: grantForm.ends_at
+              ? new Date(grantForm.ends_at).toISOString()
+              : null,
           }),
         },
       );
@@ -278,6 +304,51 @@ export default function OwnerFeatureRegistry() {
               ))}
             </select>
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs text-slate-400">
+              Starts at
+              <input
+                type="datetime-local"
+                value={grantForm.starts_at}
+                onChange={(event) =>
+                  setGrantForm({ ...grantForm, starts_at: event.target.value })
+                }
+                className="mt-2 w-full rounded border border-slate-700 bg-[#0D121F] px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <label className="block text-xs text-slate-400">
+              Ends at
+              <input
+                type="datetime-local"
+                value={grantForm.ends_at}
+                onChange={(event) =>
+                  setGrantForm({ ...grantForm, ends_at: event.target.value })
+                }
+                className="mt-2 w-full rounded border border-slate-700 bg-[#0D121F] px-3 py-2 text-sm text-white"
+              />
+            </label>
+          </div>
+          <label className="block text-xs text-slate-400">
+            Feature configuration (JSON)
+            <textarea
+              value={grantForm.configuration}
+              onChange={(event) =>
+                setGrantForm({
+                  ...grantForm,
+                  configuration: event.target.value,
+                })
+              }
+              rows={4}
+              className="mt-2 w-full rounded border border-slate-700 bg-[#0D121F] px-3 py-2 font-mono text-xs text-white"
+              aria-describedby="feature-schema-hint"
+            />
+          </label>
+          <p id="feature-schema-hint" className="text-xs text-slate-500">
+            {selectedFeature?.configuration_schema &&
+            Object.keys(selectedFeature.configuration_schema).length > 0
+              ? `Schema: ${JSON.stringify(selectedFeature.configuration_schema)}`
+              : "No feature-specific configuration schema."}
+          </p>
           <label className="block text-xs text-slate-400">
             Broker tenant
             <select
