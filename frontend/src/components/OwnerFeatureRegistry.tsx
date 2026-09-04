@@ -12,18 +12,11 @@ interface Feature {
   is_available: boolean;
   eligible_plans: string[];
   pricing_type: string;
+  billable_amount: string | number | null;
+  dependency_keys: string[];
+  conflict_keys: string[];
   configuration_schema: Record<string, unknown>;
   internal_notes: string | null;
-}
-
-interface Grant {
-  id: string;
-  tenant_id: string;
-  feature_id: string;
-  status: string;
-  configuration: Record<string, unknown>;
-  starts_at: string | null;
-  ends_at: string | null;
 }
 
 interface BrokerSummary {
@@ -33,11 +26,25 @@ interface BrokerSummary {
   is_active: boolean;
 }
 
+interface FeatureGrant {
+  id: string;
+  tenant_id: string;
+  feature_id: string;
+  status: string;
+  configuration: Record<string, unknown>;
+  starts_at: string | null;
+  ends_at: string | null;
+  granted_by: string;
+  feature_key: string;
+}
+
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function OwnerFeatureRegistry() {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [brokers, setBrokers] = useState<BrokerSummary[]>([]);
+  const [grants, setGrants] = useState<Record<string, FeatureGrant[]>>({});
+  const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,6 +55,9 @@ export default function OwnerFeatureRegistry() {
     version: "1.0",
     eligible_plans: "",
     pricing_type: "INCLUDED",
+    billable_amount: "",
+    dependency_keys: "",
+    conflict_keys: "",
   });
   const [grantForm, setGrantForm] = useState({
     feature_id: "",
@@ -100,8 +110,11 @@ export default function OwnerFeatureRegistry() {
   }
 
   useEffect(() => {
-    void loadFeatures();
-    void loadBrokers();
+    const timer = window.setTimeout(() => {
+      void loadFeatures();
+      void loadBrokers();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function createFeature(event: FormEvent) {
@@ -120,6 +133,17 @@ export default function OwnerFeatureRegistry() {
             .split(",")
             .map((plan) => plan.trim().toUpperCase())
             .filter(Boolean),
+          billable_amount: featureForm.billable_amount
+            ? Number(featureForm.billable_amount)
+            : null,
+          dependency_keys: featureForm.dependency_keys
+            .split(",")
+            .map((key) => key.trim())
+            .filter(Boolean),
+          conflict_keys: featureForm.conflict_keys
+            .split(",")
+            .map((key) => key.trim())
+            .filter(Boolean),
         }),
       });
       const data = (await response.json().catch(() => ({}))) as {
@@ -134,6 +158,9 @@ export default function OwnerFeatureRegistry() {
         version: "1.0",
         eligible_plans: "",
         pricing_type: "INCLUDED",
+        billable_amount: "",
+        dependency_keys: "",
+        conflict_keys: "",
       });
       setMessage("Feature registered successfully.");
       await loadFeatures();
@@ -197,6 +224,70 @@ export default function OwnerFeatureRegistry() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadGrants(featureId: string) {
+    if (expandedFeature === featureId) {
+      setExpandedFeature(null);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${api}/api/v1/owner/features/${featureId}/grants`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+          },
+        },
+      );
+      if (!response.ok) throw new Error("Unable to load feature grants.");
+      setGrants({
+        ...grants,
+        [featureId]: (await response.json()) as FeatureGrant[],
+      });
+      setExpandedFeature(featureId);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load feature grants.",
+      );
+    }
+  }
+
+  async function revokeGrant(grant: FeatureGrant) {
+    try {
+      const response = await fetch(
+        `${api}/api/v1/owner/features/${grant.feature_id}/grants/${grant.tenant_id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+          },
+        },
+      );
+      if (!response.ok) throw new Error("Unable to revoke feature grant.");
+      setMessage("Feature grant revoked and audited.");
+      const refreshed = await fetch(
+        `${api}/api/v1/owner/features/${grant.feature_id}/grants`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+          },
+        },
+      );
+      if (refreshed.ok)
+        setGrants({
+          ...grants,
+          [grant.feature_id]: (await refreshed.json()) as FeatureGrant[],
+        });
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to revoke feature grant.",
+      );
     }
   }
 
@@ -272,6 +363,32 @@ export default function OwnerFeatureRegistry() {
             placeholder="ENTERPRISE, PROFESSIONAL"
             onChange={(value) =>
               setFeatureForm({ ...featureForm, eligible_plans: value })
+            }
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Billable amount"
+              value={featureForm.billable_amount}
+              placeholder="0.00"
+              onChange={(value) =>
+                setFeatureForm({ ...featureForm, billable_amount: value })
+              }
+            />
+            <Input
+              label="Dependencies"
+              value={featureForm.dependency_keys}
+              placeholder="ib_module"
+              onChange={(value) =>
+                setFeatureForm({ ...featureForm, dependency_keys: value })
+              }
+            />
+          </div>
+          <Input
+            label="Conflicts"
+            value={featureForm.conflict_keys}
+            placeholder="legacy_reports"
+            onChange={(value) =>
+              setFeatureForm({ ...featureForm, conflict_keys: value })
             }
           />
           <button
@@ -402,20 +519,64 @@ export default function OwnerFeatureRegistry() {
           <p className="text-sm text-slate-500">No features registered.</p>
         ) : (
           features.map((feature) => (
-            <div
-              key={feature.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 px-4 py-3"
-            >
-              <div>
-                <p className="font-medium text-white">{feature.name}</p>
-                <p className="text-xs text-slate-500">
-                  {feature.feature_key} · v{feature.version} ·{" "}
-                  {feature.pricing_type}
-                </p>
+            <div key={feature.id}>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 px-4 py-3">
+                <div>
+                  <p className="font-medium text-white">{feature.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {feature.feature_key} · v{feature.version} ·{" "}
+                    {feature.pricing_type}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {feature.dependency_keys?.length
+                      ? `Requires: ${feature.dependency_keys.join(", ")}`
+                      : "No dependencies"}
+                    {feature.conflict_keys?.length
+                      ? ` · Conflicts: ${feature.conflict_keys.join(", ")}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-emerald-300">
+                    {feature.is_available ? "Available" : "Unavailable"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void loadGrants(feature.id)}
+                    className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300"
+                  >
+                    {expandedFeature === feature.id
+                      ? "Hide grants"
+                      : "View grants"}
+                  </button>
+                </div>
               </div>
-              <span className="text-xs text-emerald-300">
-                {feature.is_available ? "Available" : "Unavailable"}
-              </span>
+              {expandedFeature === feature.id && (
+                <div className="rounded border border-slate-800 bg-[#080D17] p-3 text-xs">
+                  {(grants[feature.id] ?? []).length === 0 ? (
+                    <p className="text-slate-500">No grants found.</p>
+                  ) : (
+                    (grants[feature.id] ?? []).map((grant) => (
+                      <div
+                        key={grant.id}
+                        className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 py-2 last:border-0"
+                      >
+                        <span className="text-slate-400">
+                          {grant.tenant_id} · {grant.status}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void revokeGrant(grant)}
+                          disabled={grant.status === "DISABLED"}
+                          className="rounded border border-rose-500/30 px-2 py-1 text-rose-300 disabled:opacity-40"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

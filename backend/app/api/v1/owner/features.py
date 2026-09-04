@@ -1,6 +1,7 @@
 """Owner controls for reusable feature definitions and tenant grants."""
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....db import get_db
+from ....core.feature_registry import feature_grant_is_active
 from ....middleware.audit_logger import AuditLogger
 from ....models import FeatureDefinition, Role, Tenant, TenantFeatureGrant, User
 from ....security import get_current_owner_user
@@ -36,6 +38,11 @@ class FeatureCreate(BaseModel):
     version: str = Field(default="1.0", max_length=30)
     eligible_plans: list[str] = Field(default_factory=list)
     pricing_type: str = Field(default="INCLUDED", max_length=30)
+    billable_amount: Decimal | None = Field(
+        default=None, ge=0, max_digits=19, decimal_places=4
+    )
+    dependency_keys: list[str] = Field(default_factory=list)
+    conflict_keys: list[str] = Field(default_factory=list)
     configuration_schema: dict = Field(default_factory=dict)
     internal_notes: str | None = Field(default=None, max_length=2000)
 
@@ -50,6 +57,9 @@ class FeatureResponse(BaseModel):
     is_available: bool
     eligible_plans: list
     pricing_type: str
+    billable_amount: Decimal | None
+    dependency_keys: list
+    conflict_keys: list
     configuration_schema: dict
     internal_notes: str | None
 
@@ -73,6 +83,47 @@ class GrantResponse(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     granted_by: UUID
+
+
+class GrantListResponse(GrantResponse):
+    feature_key: str
+
+
+async def _validate_relationships(
+    db: AsyncSession,
+    feature: FeatureDefinition,
+    tenant_id: UUID,
+    activating: bool,
+) -> None:
+    if not activating:
+        return
+    keys = set(feature.dependency_keys or []) | set(feature.conflict_keys or [])
+    if not keys:
+        return
+    rows = await db.execute(
+        select(FeatureDefinition, TenantFeatureGrant)
+        .join(TenantFeatureGrant, TenantFeatureGrant.feature_id == FeatureDefinition.id)
+        .where(
+            TenantFeatureGrant.tenant_id == tenant_id,
+            FeatureDefinition.feature_key.in_(keys),
+        )
+    )
+    active = {
+        definition.feature_key
+        for definition, grant in rows.all()
+        if feature_grant_is_active(grant)
+    }
+    missing = sorted(set(feature.dependency_keys or []) - active)
+    conflicts = sorted(set(feature.conflict_keys or []) & active)
+    if missing or conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Feature dependencies or conflicts prevent activation",
+                "missing_dependencies": missing,
+                "conflicts": conflicts,
+            },
+        )
 
 
 class BrokerSummary(BaseModel):
@@ -180,6 +231,11 @@ async def create_feature(
             "version": feature.version,
             "eligible_plans": feature.eligible_plans,
             "pricing_type": feature.pricing_type,
+            "billable_amount": str(feature.billable_amount)
+            if feature.billable_amount is not None
+            else None,
+            "dependency_keys": feature.dependency_keys,
+            "conflict_keys": feature.conflict_keys,
             "configuration_schema": feature.configuration_schema,
             "internal_notes": feature.internal_notes,
         },
@@ -203,6 +259,12 @@ async def grant_feature(
     if payload.ends_at and payload.starts_at and payload.ends_at <= payload.starts_at:
         raise HTTPException(status_code=422, detail="Grant end must be after its start")
     _validate_configuration(feature, payload.configuration)
+    await _validate_relationships(
+        db,
+        feature,
+        payload.tenant_id,
+        payload.status in {"ENABLED", "TRIAL"},
+    )
     grant = await db.scalar(
         select(TenantFeatureGrant)
         .where(
@@ -285,6 +347,68 @@ async def grant_feature(
             grant.id,
             audit_payload,
         )
+    await db.commit()
+    await db.refresh(grant)
+    return grant
+
+
+@router.get("/{feature_id}/grants", response_model=list[GrantListResponse])
+async def list_feature_grants(
+    feature_id: UUID,
+    claims: OwnerClaims = Depends(verified_owner_claims),
+    db: AsyncSession = Depends(get_db),
+) -> list[GrantListResponse]:
+    feature = await db.get(FeatureDefinition, feature_id)
+    if not feature:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    rows = await db.execute(
+        select(TenantFeatureGrant)
+        .where(TenantFeatureGrant.feature_id == feature_id)
+        .order_by(TenantFeatureGrant.created_at.desc())
+    )
+    return [
+        GrantListResponse(
+            id=grant.id,
+            tenant_id=grant.tenant_id,
+            feature_id=grant.feature_id,
+            status=grant.status,
+            configuration=grant.configuration,
+            starts_at=grant.starts_at,
+            ends_at=grant.ends_at,
+            granted_by=grant.granted_by,
+            feature_key=feature.feature_key,
+        )
+        for grant in rows.scalars()
+    ]
+
+
+@router.delete("/{feature_id}/grants/{tenant_id}", response_model=GrantResponse)
+async def revoke_feature(
+    feature_id: UUID,
+    tenant_id: UUID,
+    claims: OwnerClaims = Depends(verified_owner_claims),
+    db: AsyncSession = Depends(get_db),
+) -> TenantFeatureGrant:
+    grant = await db.scalar(
+        select(TenantFeatureGrant)
+        .where(
+            TenantFeatureGrant.feature_id == feature_id,
+            TenantFeatureGrant.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if not grant:
+        raise HTTPException(status_code=404, detail="Feature grant not found")
+    previous_status = grant.status
+    grant.status = "DISABLED"
+    await AuditLogger.log_update(
+        db,
+        tenant_id,
+        UUID(claims["sub"]),
+        "FEATURE_GRANT",
+        grant.id,
+        {"action": "REVOKED", "old_status": previous_status, "new_status": "DISABLED"},
+    )
     await db.commit()
     await db.refresh(grant)
     return grant

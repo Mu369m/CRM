@@ -9,6 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import FeatureDefinition, Tenant, TenantFeatureGrant
 
 
+def feature_relationships_are_satisfied(
+    dependency_keys: list[str] | None,
+    conflict_keys: list[str] | None,
+    active_keys: set[str],
+) -> bool:
+    dependencies = set(dependency_keys or [])
+    conflicts = set(conflict_keys or [])
+    return dependencies.issubset(active_keys) and not conflicts.intersection(
+        active_keys
+    )
+
+
 def feature_grant_is_active(
     grant: TenantFeatureGrant, now: datetime | None = None
 ) -> bool:
@@ -41,8 +53,32 @@ async def is_feature_enabled(
         return False
     definition, grant, plan = result
     eligible_plans = definition.eligible_plans or []
-    return (
+    base_enabled = (
         definition.is_available
         and (not eligible_plans or plan in eligible_plans)
         and feature_grant_is_active(grant)
+    )
+    if not base_enabled:
+        return False
+
+    related_keys = set(definition.dependency_keys or []) | set(
+        definition.conflict_keys or []
+    )
+    if not related_keys:
+        return True
+    related_rows = await db.execute(
+        select(FeatureDefinition, TenantFeatureGrant)
+        .join(TenantFeatureGrant, TenantFeatureGrant.feature_id == FeatureDefinition.id)
+        .where(
+            TenantFeatureGrant.tenant_id == tenant_id,
+            FeatureDefinition.feature_key.in_(related_keys),
+        )
+    )
+    active_keys = {
+        related_definition.feature_key
+        for related_definition, related_grant in related_rows.all()
+        if feature_grant_is_active(related_grant)
+    }
+    return feature_relationships_are_satisfied(
+        definition.dependency_keys, definition.conflict_keys, active_keys
     )

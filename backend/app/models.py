@@ -2033,6 +2033,11 @@ class FeatureDefinition(Base):
     is_available: Mapped[bool] = mapped_column(default=True, index=True)
     eligible_plans: Mapped[list] = mapped_column(JSONB, default=list)
     pricing_type: Mapped[str] = mapped_column(String(30), default="INCLUDED")
+    billable_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(19, 4), nullable=True
+    )
+    dependency_keys: Mapped[list] = mapped_column(JSONB, default=list)
+    conflict_keys: Mapped[list] = mapped_column(JSONB, default=list)
     configuration_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
     internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

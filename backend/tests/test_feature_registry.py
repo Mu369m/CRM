@@ -1,7 +1,10 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from app.core.feature_registry import feature_grant_is_active
+from app.core.feature_registry import (
+    feature_grant_is_active,
+    feature_relationships_are_satisfied,
+)
 from app.models import TenantFeatureGrant
 
 
@@ -45,3 +48,9 @@ def test_trial_grant_is_active_without_schedule() -> None:
         status="TRIAL",
     )
     assert feature_grant_is_active(grant) is True
+
+
+def test_feature_relationships_require_dependencies_and_reject_conflicts() -> None:
+    assert feature_relationships_are_satisfied(["ib"], ["legacy"], {"ib"}) is True
+    assert feature_relationships_are_satisfied(["ib"], ["legacy"], set()) is False
+    assert feature_relationships_are_satisfied([], ["legacy"], {"legacy"}) is False
