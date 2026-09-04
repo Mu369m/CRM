@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ from app.models import (
     ClientFinancials,
 )
 from app.middleware.permission_check import check_permission
+from app.core.withdrawal_approval import WithdrawalApprovalError, initiate_withdrawal
 
 router = APIRouter(prefix="/api/v1/broker/withdrawals", tags=["Withdrawals"])
 
@@ -124,11 +125,6 @@ class WithdrawalListResponse(BaseModel):
     items: List[WithdrawalResponse]
 
 
-def _available_client_balance(client: Client) -> Decimal:
-    """Treat an uninitialized client balance as zero."""
-    return client.net_deposits or Decimal("0")
-
-
 # ========== Withdrawal Method Management ==========
 
 
@@ -196,6 +192,9 @@ async def create_withdrawal(
     payload: WithdrawalCreate,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
+    idempotency_key: str = Header(
+        ..., alias="Idempotency-Key", min_length=16, max_length=120
+    ),
 ):
     """Create new withdrawal. Requires: withdrawals.create"""
 
@@ -246,30 +245,38 @@ async def create_withdrawal(
             detail=f"Amount exceeds maximum: {method.max_amount}",
         )
 
-    # Validate sufficient balance
-    if _available_client_balance(client) < payload.amount:
+    try:
+        withdrawal_id, _ = await initiate_withdrawal(
+            db=db,
+            tenant_id=tenant_id,
+            client_id=payload.client_id,
+            user_id=user_id,
+            amount=payload.amount,
+            currency=payload.currency,
+            method_id=payload.method_id,
+            idempotency_key=idempotency_key,
+        )
+    except WithdrawalApprovalError as error:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Insufficient balance for withdrawal",
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
+        ) from error
+
+    withdrawal = await db.scalar(
+        select(Withdrawal).where(
+            Withdrawal.id == withdrawal_id, Withdrawal.tenant_id == tenant_id
+        )
+    )
+    if withdrawal is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Withdrawal creation failed",
         )
 
-    # Calculate fees
     processing_fee = payload.amount * (method.processing_fee_percent / Decimal("100"))
-    net_amount = payload.amount - processing_fee
-
-    withdrawal = Withdrawal(
-        tenant_id=tenant_id,
-        client_id=payload.client_id,
-        amount=payload.amount,
-        currency=payload.currency,
-        method_id=payload.method_id,
-        method_name=method.name,
-        payment_reference=payload.payment_reference,
-        processing_fee=processing_fee,
-        net_amount=net_amount,
-    )
-
-    db.add(withdrawal)
+    withdrawal.method_name = method.name
+    withdrawal.payment_reference = payload.payment_reference
+    withdrawal.processing_fee = processing_fee
+    withdrawal.net_amount = payload.amount - processing_fee
     await db.commit()
     await db.refresh(withdrawal)
 
