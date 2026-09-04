@@ -37,6 +37,7 @@ from .api.v1.broker.finance import router as finance_router
 from .api.v1.broker.risk import router as risk_router
 from .api.v1.broker.trading_control import router as trading_control_router
 from .api.v1.broker.infrastructure import router as infrastructure_router
+from .api.v1.broker.features import router as broker_features_router
 
 settings = get_settings()
 
@@ -93,6 +94,7 @@ app.include_router(finance_router)
 app.include_router(risk_router)
 app.include_router(trading_control_router)
 app.include_router(infrastructure_router)
+app.include_router(broker_features_router)
 
 
 @app.get("/health", tags=["system"])
