@@ -2013,3 +2013,61 @@ class KYCApproval(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class FeatureDefinition(Base):
+    """Reusable platform feature registered once for all tenants."""
+
+    __tablename__ = "feature_definitions"
+    __table_args__ = (
+        UniqueConstraint("feature_key", name="uq_feature_definition_key"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    feature_key: Mapped[str] = mapped_column(String(120), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    feature_type: Mapped[str] = mapped_column(String(40), default="MODULE")
+    version: Mapped[str] = mapped_column(String(30), default="1.0")
+    is_available: Mapped[bool] = mapped_column(default=True, index=True)
+    eligible_plans: Mapped[list] = mapped_column(JSONB, default=list)
+    pricing_type: Mapped[str] = mapped_column(String(30), default="INCLUDED")
+    configuration_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
+    internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TenantFeatureGrant(Base):
+    """Tenant-specific entitlement, independent from the purchased plan."""
+
+    __tablename__ = "tenant_feature_grants"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "feature_id", name="uq_tenant_feature_grant"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    feature_id: Mapped[UUID] = mapped_column(
+        ForeignKey("feature_definitions.id", ondelete="RESTRICT"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="DISABLED", index=True)
+    configuration: Mapped[dict] = mapped_column(JSONB, default=dict)
+    starts_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    granted_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
