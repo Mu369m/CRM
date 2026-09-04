@@ -285,9 +285,20 @@ class TradingAccount(Base):
     is_demo: Mapped[bool] = mapped_column(default=False)
     leverage: Mapped[int] = mapped_column(default=100)
     is_locked: Mapped[bool] = mapped_column(default=False)
+    trading_enabled: Mapped[bool] = mapped_column(default=True)
+    buy_enabled: Mapped[bool] = mapped_column(default=True)
+    sell_enabled: Mapped[bool] = mapped_column(default=True)
+    ea_enabled: Mapped[bool] = mapped_column(default=True)
+    max_lot_size: Mapped[Decimal] = mapped_column(
+        Numeric(20, 8), default=Decimal("100")
+    )
+    max_open_positions: Mapped[int] = mapped_column(default=100)
     provisioning_status: Mapped[str] = mapped_column(String(20), default="PENDING")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
