@@ -13,7 +13,7 @@ from sqlalchemy import select, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.db import get_tenant_db
+from app.core.db_router import get_tenant_db
 from app.security import current_claims
 from app.models import (
     DynamicRole,

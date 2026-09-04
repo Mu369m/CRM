@@ -14,7 +14,7 @@ from sqlalchemy import select, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
-from app.db import get_tenant_db
+from app.core.db_router import get_tenant_db
 from app.security import current_claims
 from app.models import (
     Deposit,
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/v1/broker/deposits", tags=["Deposits"])
 
 
 # ========== Schemas ==========
+
 
 class DepositMethodCreate(BaseModel):
     name: str = Field(..., max_length=200)
@@ -46,7 +47,7 @@ class DepositMethodCreate(BaseModel):
                 "provider": "Stripe",
                 "method_type": "CARD",
                 "processing_fee_percent": Decimal("2.5"),
-                "processing_time_hours": 1
+                "processing_time_hours": 1,
             }
         }
 
@@ -64,7 +65,7 @@ class DepositCreate(BaseModel):
                 "client_id": "550e8400-e29b-41d4-a716-446655440000",
                 "amount": Decimal("1000.00"),
                 "currency": "USD",
-                "method_id": "550e8400-e29b-41d4-a716-446655440001"
+                "method_id": "550e8400-e29b-41d4-a716-446655440001",
             }
         }
 
@@ -125,23 +126,28 @@ class DepositListResponse(BaseModel):
 
 # ========== Deposit Method Management ==========
 
-@router.post("/methods", response_model=DepositMethodResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/methods",
+    response_model=DepositMethodResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_deposit_method(
     payload: DepositMethodCreate,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create deposit payment method. Requires: settings.manage"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     method = DepositMethod(
         tenant_id=tenant_id,
         name=payload.name,
@@ -152,11 +158,11 @@ async def create_deposit_method(
         processing_fee_percent=payload.processing_fee_percent,
         processing_time_hours=payload.processing_time_hours,
     )
-    
+
     db.add(method)
     await db.commit()
     await db.refresh(method)
-    
+
     return method
 
 
@@ -166,9 +172,9 @@ async def list_deposit_methods(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get all deposit methods for tenant"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(DepositMethod).where(DepositMethod.tenant_id == tenant_id)
     )
@@ -177,6 +183,7 @@ async def list_deposit_methods(
 
 # ========== Deposit Transactions ==========
 
+
 @router.post("/", response_model=DepositResponse, status_code=status.HTTP_201_CREATED)
 async def create_deposit(
     payload: DepositCreate,
@@ -184,17 +191,17 @@ async def create_deposit(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create new deposit. Requires: deposits.create"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
     has_permission = await check_permission(
         user_id, "deposits", "create", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Verify client exists
     result = await db.execute(
         select(Client).where(
@@ -203,34 +210,39 @@ async def create_deposit(
     )
     client = result.scalar()
     if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
     # Verify deposit method exists
     result = await db.execute(
         select(DepositMethod).where(
-            (DepositMethod.id == payload.method_id) & (DepositMethod.tenant_id == tenant_id)
+            (DepositMethod.id == payload.method_id)
+            & (DepositMethod.tenant_id == tenant_id)
         )
     )
     method = result.scalar()
     if not method:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deposit method not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Deposit method not found"
+        )
+
     # Validate amount limits
     if method.min_amount and payload.amount < method.min_amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Amount below minimum: {method.min_amount}"
+            detail=f"Amount below minimum: {method.min_amount}",
         )
     if method.max_amount and payload.amount > method.max_amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Amount exceeds maximum: {method.max_amount}"
+            detail=f"Amount exceeds maximum: {method.max_amount}",
         )
-    
+
     # Calculate fees
     processing_fee = payload.amount * (method.processing_fee_percent / Decimal("100"))
     net_amount = payload.amount - processing_fee
-    
+
     deposit = Deposit(
         tenant_id=tenant_id,
         client_id=payload.client_id,
@@ -242,11 +254,11 @@ async def create_deposit(
         processing_fee=processing_fee,
         net_amount=net_amount,
     )
-    
+
     db.add(deposit)
     await db.commit()
     await db.refresh(deposit)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -258,7 +270,7 @@ async def create_deposit(
     )
     db.add(activity)
     await db.commit()
-    
+
     return deposit
 
 
@@ -273,38 +285,38 @@ async def list_deposits(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """List deposits. Requires: deposits.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "deposits", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     query = select(Deposit).where(Deposit.tenant_id == tenant_id)
-    
+
     if status:
         query = query.where(Deposit.status == status)
-    
+
     if client_id:
         query = query.where(Deposit.client_id == client_id)
-    
+
     if method_id:
         query = query.where(Deposit.method_id == method_id)
-    
+
     # Count total
     count_result = await db.execute(query)
     total = len(count_result.scalars().all())
-    
+
     # Paginate
     offset = (page - 1) * limit
     query = query.order_by(desc(Deposit.created_at)).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     deposits = result.scalars().all()
-    
+
     return {
         "total": total,
         "page": page,
@@ -320,26 +332,26 @@ async def get_deposit(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get deposit details. Requires: deposits.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "deposits", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(Deposit).where(
             (Deposit.id == deposit_id) & (Deposit.tenant_id == tenant_id)
         )
     )
     deposit = result.scalar()
-    
+
     if not deposit:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     return deposit
 
 
@@ -351,37 +363,37 @@ async def approve_deposit(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Approve deposit. Requires: deposits.approve"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
     has_permission = await check_permission(
         user_id, "deposits", "approve", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(Deposit).where(
             (Deposit.id == deposit_id) & (Deposit.tenant_id == tenant_id)
         )
     )
     deposit = result.scalar()
-    
+
     if not deposit:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if deposit.status != "PENDING":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot approve deposit with status: {deposit.status}"
+            detail=f"Cannot approve deposit with status: {deposit.status}",
         )
-    
+
     deposit.status = "APPROVED"
     deposit.approved_by = user_id
     deposit.approved_at = payload.approved_at or datetime.utcnow()
-    
+
     # Update client financials
     result = await db.execute(
         select(ClientFinancials).where(ClientFinancials.client_id == deposit.client_id)
@@ -390,20 +402,20 @@ async def approve_deposit(
     if financials:
         financials.total_deposits += deposit.net_amount
         financials.net_deposits += deposit.net_amount
-    
+
     # Update client totals
-    result = await db.execute(
-        select(Client).where(Client.id == deposit.client_id)
-    )
+    result = await db.execute(select(Client).where(Client.id == deposit.client_id))
     client = result.scalar()
     if client:
-        client.total_deposits = (client.total_deposits or Decimal("0")) + deposit.net_amount
+        client.total_deposits = (
+            client.total_deposits or Decimal("0")
+        ) + deposit.net_amount
         client.net_deposits = (client.net_deposits or Decimal("0")) + deposit.net_amount
         client.last_deposit_date = datetime.utcnow()
-    
+
     await db.commit()
     await db.refresh(deposit)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -415,7 +427,7 @@ async def approve_deposit(
     )
     db.add(activity)
     await db.commit()
-    
+
     return deposit
 
 
@@ -427,40 +439,40 @@ async def reject_deposit(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Reject deposit. Requires: deposits.reject"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
     has_permission = await check_permission(
         user_id, "deposits", "reject", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(Deposit).where(
             (Deposit.id == deposit_id) & (Deposit.tenant_id == tenant_id)
         )
     )
     deposit = result.scalar()
-    
+
     if not deposit:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if deposit.status != "PENDING":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot reject deposit with status: {deposit.status}"
+            detail=f"Cannot reject deposit with status: {deposit.status}",
         )
-    
+
     deposit.status = "REJECTED"
     deposit.rejected_by = user_id
     deposit.rejection_reason = payload.rejection_reason
-    
+
     await db.commit()
     await db.refresh(deposit)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -472,7 +484,7 @@ async def reject_deposit(
     )
     db.add(activity)
     await db.commit()
-    
+
     return deposit
 
 
@@ -483,39 +495,39 @@ async def complete_deposit(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Mark deposit as completed. Requires: deposits.approve"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
     has_permission = await check_permission(
         user_id, "deposits", "approve", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(Deposit).where(
             (Deposit.id == deposit_id) & (Deposit.tenant_id == tenant_id)
         )
     )
     deposit = result.scalar()
-    
+
     if not deposit:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if deposit.status != "APPROVED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only approved deposits can be completed"
+            detail="Only approved deposits can be completed",
         )
-    
+
     deposit.status = "COMPLETED"
     deposit.completed_at = datetime.utcnow()
-    
+
     await db.commit()
     await db.refresh(deposit)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -527,5 +539,5 @@ async def complete_deposit(
     )
     db.add(activity)
     await db.commit()
-    
+
     return deposit

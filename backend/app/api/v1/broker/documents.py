@@ -13,7 +13,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
-from app.db import get_tenant_db
+from app.core.db_router import get_tenant_db
 from app.security import current_claims
 from app.models import (
     DocumentType,
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/v1/broker/documents", tags=["KYC & Documents"])
 
 # ========== Schemas ==========
 
+
 class DocumentTypeCreate(BaseModel):
     name: str = Field(..., max_length=200)
     description: Optional[str] = None
@@ -42,7 +43,7 @@ class DocumentTypeCreate(BaseModel):
                 "name": "ID Verification",
                 "description": "Government-issued ID or passport",
                 "required_for_kyc": True,
-                "allowed_formats": "pdf,jpg,png"
+                "allowed_formats": "pdf,jpg,png",
             }
         }
 
@@ -63,7 +64,7 @@ class KYCDocumentCreate(BaseModel):
                 "file_name": "passport.pdf",
                 "file_path": "s3://docs/client-123/passport.pdf",
                 "file_size_bytes": 2048576,
-                "mime_type": "application/pdf"
+                "mime_type": "application/pdf",
             }
         }
 
@@ -148,23 +149,26 @@ class KYCDocumentListResponse(BaseModel):
 
 # ========== Document Type Management ==========
 
-@router.post("/types", response_model=DocumentTypeResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/types", response_model=DocumentTypeResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_document_type(
     payload: DocumentTypeCreate,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create document type. Requires: settings.manage"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Check if name already exists
     result = await db.execute(
         select(DocumentType).where(
@@ -173,10 +177,9 @@ async def create_document_type(
     )
     if result.scalar():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Document type already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="Document type already exists"
         )
-    
+
     doc_type = DocumentType(
         tenant_id=tenant_id,
         name=payload.name,
@@ -185,11 +188,11 @@ async def create_document_type(
         max_file_size_mb=payload.max_file_size_mb,
         allowed_formats=payload.allowed_formats,
     )
-    
+
     db.add(doc_type)
     await db.commit()
     await db.refresh(doc_type)
-    
+
     return doc_type
 
 
@@ -199,9 +202,9 @@ async def list_document_types(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get all document types for tenant"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(DocumentType).where(DocumentType.tenant_id == tenant_id)
     )
@@ -210,24 +213,25 @@ async def list_document_types(
 
 # ========== Document Upload & Management ==========
 
-@router.post("/upload", response_model=KYCDocumentResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/upload", response_model=KYCDocumentResponse, status_code=status.HTTP_201_CREATED
+)
 async def upload_document(
     payload: KYCDocumentCreate,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Upload KYC document. Requires: kyc.create"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "create", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "create", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Verify client exists
     result = await db.execute(
         select(Client).where(
@@ -235,26 +239,31 @@ async def upload_document(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
     # Verify document type exists
     result = await db.execute(
         select(DocumentType).where(
-            (DocumentType.id == payload.document_type_id) & (DocumentType.tenant_id == tenant_id)
+            (DocumentType.id == payload.document_type_id)
+            & (DocumentType.tenant_id == tenant_id)
         )
     )
     doc_type = result.scalar()
     if not doc_type:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document type not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document type not found"
+        )
+
     # Validate file size
     max_bytes = doc_type.max_file_size_mb * 1024 * 1024
     if payload.file_size_bytes > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File size exceeds maximum: {doc_type.max_file_size_mb}MB"
+            detail=f"File size exceeds maximum: {doc_type.max_file_size_mb}MB",
         )
-    
+
     document = KYCDocument(
         tenant_id=tenant_id,
         client_id=payload.client_id,
@@ -265,11 +274,11 @@ async def upload_document(
         mime_type=payload.mime_type,
         uploaded_by=user_id,
     )
-    
+
     db.add(document)
     await db.commit()
     await db.refresh(document)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -281,7 +290,7 @@ async def upload_document(
     )
     db.add(activity)
     await db.commit()
-    
+
     return document
 
 
@@ -295,35 +304,35 @@ async def list_documents(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """List KYC documents. Requires: kyc.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "kyc", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     query = select(KYCDocument).where(KYCDocument.tenant_id == tenant_id)
-    
+
     if client_id:
         query = query.where(KYCDocument.client_id == client_id)
-    
+
     if status:
         query = query.where(KYCDocument.status == status)
-    
+
     # Count total
     count_result = await db.execute(query)
     total = len(count_result.scalars().all())
-    
+
     # Paginate
     offset = (page - 1) * limit
     query = query.order_by(desc(KYCDocument.created_at)).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     documents = result.scalars().all()
-    
+
     return {
         "total": total,
         "page": page,
@@ -339,26 +348,26 @@ async def get_document(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get document details. Requires: kyc.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "kyc", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCDocument).where(
             (KYCDocument.id == document_id) & (KYCDocument.tenant_id == tenant_id)
         )
     )
     document = result.scalar()
-    
+
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     return document
 
 
@@ -370,40 +379,38 @@ async def approve_document(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Approve KYC document. Requires: kyc.approve"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "approve", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "approve", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCDocument).where(
             (KYCDocument.id == document_id) & (KYCDocument.tenant_id == tenant_id)
         )
     )
     document = result.scalar()
-    
+
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if document.status != "PENDING":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot approve document with status: {document.status}"
+            detail=f"Cannot approve document with status: {document.status}",
         )
-    
+
     document.status = "APPROVED"
     document.approved_by = user_id
     document.approved_at = payload.approved_at or datetime.utcnow()
-    
+
     await db.commit()
     await db.refresh(document)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -415,7 +422,7 @@ async def approve_document(
     )
     db.add(activity)
     await db.commit()
-    
+
     return document
 
 
@@ -427,40 +434,38 @@ async def reject_document(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Reject KYC document. Requires: kyc.reject"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "reject", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "reject", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCDocument).where(
             (KYCDocument.id == document_id) & (KYCDocument.tenant_id == tenant_id)
         )
     )
     document = result.scalar()
-    
+
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if document.status != "PENDING":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot reject document with status: {document.status}"
+            detail=f"Cannot reject document with status: {document.status}",
         )
-    
+
     document.status = "REJECTED"
     document.rejected_by = user_id
     document.rejection_reason = payload.rejection_reason
-    
+
     await db.commit()
     await db.refresh(document)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -472,41 +477,44 @@ async def reject_document(
     )
     db.add(activity)
     await db.commit()
-    
+
     return document
 
 
 # ========== KYC Approval Workflow ==========
 
-@router.post("/kyc-approval", response_model=KYCApprovalResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/kyc-approval",
+    response_model=KYCApprovalResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_kyc_approval(
     payload: KYCApprovalCreate,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create KYC approval request. Requires: kyc.create"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "create", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "create", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     kyc_approval = KYCApproval(
         tenant_id=tenant_id,
-        client_id=payload.client_id if hasattr(payload, 'client_id') else None,
+        client_id=payload.client_id if hasattr(payload, "client_id") else None,
         kyc_level=payload.kyc_level,
         notes=payload.notes,
     )
-    
+
     db.add(kyc_approval)
     await db.commit()
     await db.refresh(kyc_approval)
-    
+
     return kyc_approval
 
 
@@ -517,16 +525,16 @@ async def get_client_kyc_status(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get KYC approval status for client. Requires: kyc.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "kyc", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCApproval).where(
             (KYCApproval.client_id == client_id) & (KYCApproval.tenant_id == tenant_id)
@@ -543,36 +551,34 @@ async def approve_kyc(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Approve KYC verification. Requires: kyc.approve"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "approve", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "approve", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCApproval).where(
             (KYCApproval.id == kyc_approval_id) & (KYCApproval.tenant_id == tenant_id)
         )
     )
     kyc_approval = result.scalar()
-    
+
     if not kyc_approval:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     kyc_approval.status = "APPROVED"
     kyc_approval.verified_by = user_id
     kyc_approval.verified_at = payload.verified_at or datetime.utcnow()
     if payload.notes:
         kyc_approval.notes = payload.notes
-    
+
     await db.commit()
     await db.refresh(kyc_approval)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -584,7 +590,7 @@ async def approve_kyc(
     )
     db.add(activity)
     await db.commit()
-    
+
     return kyc_approval
 
 
@@ -596,33 +602,31 @@ async def reject_kyc(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Reject KYC verification. Requires: kyc.reject"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "kyc", "reject", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "kyc", "reject", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(KYCApproval).where(
             (KYCApproval.id == kyc_approval_id) & (KYCApproval.tenant_id == tenant_id)
         )
     )
     kyc_approval = result.scalar()
-    
+
     if not kyc_approval:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     kyc_approval.status = "REJECTED"
     kyc_approval.rejection_reason = payload.rejection_reason
-    
+
     await db.commit()
     await db.refresh(kyc_approval)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -634,5 +638,5 @@ async def reject_kyc(
     )
     db.add(activity)
     await db.commit()
-    
+
     return kyc_approval

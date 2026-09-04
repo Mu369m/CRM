@@ -14,7 +14,7 @@ from sqlalchemy import select, desc, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, EmailStr
 
-from app.db import get_tenant_db
+from app.core.db_router import get_tenant_db
 from app.security import current_claims
 from app.models import (
     IBPartner,
@@ -30,6 +30,7 @@ router = APIRouter(prefix="/api/v1/broker/ibs", tags=["IB Partners"])
 
 
 # ========== Schemas ==========
+
 
 class IBPartnerCreate(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -47,7 +48,7 @@ class IBPartnerCreate(BaseModel):
                 "last_name": "Smith",
                 "email": "jane@ib.com",
                 "company_name": "JSM Trading",
-                "country": "UK"
+                "country": "UK",
             }
         }
 
@@ -77,7 +78,7 @@ class IBCommissionCreate(BaseModel):
             "example": {
                 "commission_type": "DEPOSIT",
                 "base_rate": Decimal("0.01"),
-                "effective_from": "2026-01-01T00:00:00Z"
+                "effective_from": "2026-01-01T00:00:00Z",
             }
         }
 
@@ -151,6 +152,7 @@ class IBListResponse(BaseModel):
 
 # ========== Endpoints ==========
 
+
 @router.post("/", response_model=IBPartnerResponse, status_code=status.HTTP_201_CREATED)
 async def create_ib_partner(
     payload: IBPartnerCreate,
@@ -158,17 +160,15 @@ async def create_ib_partner(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create new IB partner. Requires: ib.create"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "ib", "create", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "ib", "create", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Check if email already exists
     result = await db.execute(
         select(IBPartner).where(
@@ -177,20 +177,22 @@ async def create_ib_partner(
     )
     if result.scalar():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="Email already exists"
         )
-    
+
     # Validate parent IB if provided
     if payload.parent_ib_id:
         result = await db.execute(
             select(IBPartner).where(
-                (IBPartner.id == payload.parent_ib_id) & (IBPartner.tenant_id == tenant_id)
+                (IBPartner.id == payload.parent_ib_id)
+                & (IBPartner.tenant_id == tenant_id)
             )
         )
         if not result.scalar():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent IB not found")
-    
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Parent IB not found"
+            )
+
     ib = IBPartner(
         tenant_id=tenant_id,
         first_name=payload.first_name,
@@ -201,11 +203,11 @@ async def create_ib_partner(
         country=payload.country,
         parent_ib_id=payload.parent_ib_id,
     )
-    
+
     db.add(ib)
     await db.commit()
     await db.refresh(ib)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -217,7 +219,7 @@ async def create_ib_partner(
     )
     db.add(activity)
     await db.commit()
-    
+
     return ib
 
 
@@ -232,20 +234,20 @@ async def list_ib_partners(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """List IB partners. Requires: ib.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "ib", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     query = select(IBPartner).where(
         (IBPartner.tenant_id == tenant_id) & (IBPartner.is_archived == is_archived)
     )
-    
+
     if search:
         search_term = f"%{search}%"
         query = query.where(
@@ -254,22 +256,22 @@ async def list_ib_partners(
             | (IBPartner.last_name.ilike(search_term))
             | (IBPartner.company_name.ilike(search_term))
         )
-    
+
     if status:
         query = query.where(IBPartner.status == status)
-    
+
     # Count total
     count_query = query
     count_result = await db.execute(count_query)
     total = len(count_result.scalars().all())
-    
+
     # Paginate
     offset = (page - 1) * limit
     query = query.order_by(desc(IBPartner.created_at)).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     ibs = result.scalars().all()
-    
+
     return {
         "total": total,
         "page": page,
@@ -285,38 +287,36 @@ async def get_ib_partner(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get IB partner details. Requires: ib.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "ib", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(IBPartner).where(
             (IBPartner.id == ib_id) & (IBPartner.tenant_id == tenant_id)
         )
     )
     ib = result.scalar()
-    
+
     if not ib:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Get commissions
     result = await db.execute(
         select(IBCommission).where(IBCommission.ib_partner_id == ib_id)
     )
     commissions = result.scalars().all()
-    
+
     # Get payouts
-    result = await db.execute(
-        select(IBPayout).where(IBPayout.ib_partner_id == ib_id)
-    )
+    result = await db.execute(select(IBPayout).where(IBPayout.ib_partner_id == ib_id))
     payouts = result.scalars().all()
-    
+
     # Count assigned clients
     result = await db.execute(
         select(func.count(IBRelationship.id)).where(
@@ -324,7 +324,7 @@ async def get_ib_partner(
         )
     )
     assigned_clients = result.scalar() or 0
-    
+
     return IBPartnerDetailResponse(
         **{
             **ib.__dict__,
@@ -343,41 +343,39 @@ async def update_ib_partner(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Update IB partner. Requires: ib.edit"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "ib", "edit", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "ib", "edit", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(IBPartner).where(
             (IBPartner.id == ib_id) & (IBPartner.tenant_id == tenant_id)
         )
     )
     ib = result.scalar()
-    
+
     if not ib:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Track changes
     changes = []
-    
+
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         old_value = getattr(ib, key)
         if old_value != value:
             changes.append(f"{key}: {old_value} -> {value}")
         setattr(ib, key, value)
-    
+
     ib.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(ib)
-    
+
     # Log activity
     if changes:
         activity = Activity(
@@ -390,7 +388,7 @@ async def update_ib_partner(
         )
         db.add(activity)
         await db.commit()
-    
+
     return ib
 
 
@@ -401,30 +399,28 @@ async def archive_ib_partner(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Archive IB partner. Requires: ib.delete"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "ib", "delete", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "ib", "delete", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(IBPartner).where(
             (IBPartner.id == ib_id) & (IBPartner.tenant_id == tenant_id)
         )
     )
     ib = result.scalar()
-    
+
     if not ib:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     ib.is_archived = True
     await db.commit()
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -440,7 +436,12 @@ async def archive_ib_partner(
 
 # ========== Commission Management ==========
 
-@router.post("/{ib_id}/commissions", response_model=IBCommissionResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{ib_id}/commissions",
+    response_model=IBCommissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_commission_rule(
     ib_id: UUID,
     payload: IBCommissionCreate,
@@ -448,9 +449,9 @@ async def create_commission_rule(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create commission rule for IB. Requires: ib.edit"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify IB exists
     result = await db.execute(
         select(IBPartner).where(
@@ -458,8 +459,10 @@ async def create_commission_rule(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found"
+        )
+
     commission = IBCommission(
         tenant_id=tenant_id,
         ib_partner_id=ib_id,
@@ -470,11 +473,11 @@ async def create_commission_rule(
         max_turnover=payload.max_turnover,
         effective_from=payload.effective_from,
     )
-    
+
     db.add(commission)
     await db.commit()
     await db.refresh(commission)
-    
+
     return commission
 
 
@@ -485,9 +488,9 @@ async def get_commission_rules(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get commission rules for IB"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify IB exists
     result = await db.execute(
         select(IBPartner).where(
@@ -495,8 +498,10 @@ async def get_commission_rules(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found"
+        )
+
     result = await db.execute(
         select(IBCommission).where(IBCommission.ib_partner_id == ib_id)
     )
@@ -504,6 +509,7 @@ async def get_commission_rules(
 
 
 # ========== Client Assignment ==========
+
 
 @router.post("/{ib_id}/clients", status_code=status.HTTP_201_CREATED)
 async def assign_client_to_ib(
@@ -513,9 +519,9 @@ async def assign_client_to_ib(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Assign client to IB. Requires: ib.edit"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify IB exists
     result = await db.execute(
         select(IBPartner).where(
@@ -524,8 +530,10 @@ async def assign_client_to_ib(
     )
     ib = result.scalar()
     if not ib:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found"
+        )
+
     # Verify client exists
     result = await db.execute(
         select(Client).where(
@@ -534,8 +542,10 @@ async def assign_client_to_ib(
     )
     client = result.scalar()
     if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
     # Check if relationship already exists
     result = await db.execute(
         select(IBRelationship).where(
@@ -546,24 +556,24 @@ async def assign_client_to_ib(
     if result.scalar():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Client already assigned to this IB"
+            detail="Client already assigned to this IB",
         )
-    
+
     relationship = IBRelationship(
         tenant_id=tenant_id,
         ib_partner_id=ib_id,
         client_id=payload.client_id,
     )
-    
+
     # Update client's ib_partner_id
     client.ib_partner_id = ib_id
-    
+
     # Update IB's total clients
     ib.total_clients += 1
-    
+
     db.add(relationship)
     await db.commit()
-    
+
     return {"message": "Client assigned to IB"}
 
 
@@ -574,9 +584,9 @@ async def get_ib_clients(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get all clients assigned to IB"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify IB exists
     result = await db.execute(
         select(IBPartner).where(
@@ -584,18 +594,20 @@ async def get_ib_clients(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found"
+        )
+
     result = await db.execute(
         select(Client).where(
-            (Client.ib_partner_id == ib_id)
-            & (Client.tenant_id == tenant_id)
+            (Client.ib_partner_id == ib_id) & (Client.tenant_id == tenant_id)
         )
     )
     return result.scalars().all()
 
 
 # ========== Payout Management ==========
+
 
 @router.get("/{ib_id}/payouts", response_model=List[IBPayoutResponse])
 async def get_ib_payouts(
@@ -604,9 +616,9 @@ async def get_ib_payouts(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get payouts for IB"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify IB exists
     result = await db.execute(
         select(IBPartner).where(
@@ -614,9 +626,9 @@ async def get_ib_payouts(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found")
-    
-    result = await db.execute(
-        select(IBPayout).where(IBPayout.ib_partner_id == ib_id)
-    )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="IB Partner not found"
+        )
+
+    result = await db.execute(select(IBPayout).where(IBPayout.ib_partner_id == ib_id))
     return result.scalars().all()

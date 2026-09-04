@@ -13,7 +13,7 @@ from sqlalchemy import select, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, EmailStr
 
-from app.db import get_tenant_db
+from app.core.db_router import get_tenant_db
 from app.security import current_claims
 from app.models import (
     Campaign,
@@ -32,6 +32,7 @@ router = APIRouter(prefix="/api/v1/broker/clients", tags=["Clients"])
 
 
 # ========== Schemas ==========
+
 
 class ClientCreate(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -55,7 +56,7 @@ class ClientCreate(BaseModel):
                 "phone": "+1234567890",
                 "country": "US",
                 "trading_platform": "MT5",
-                "account_type": "Standard"
+                "account_type": "Standard",
             }
         }
 
@@ -84,7 +85,7 @@ class AddAccount(BaseModel):
                 "account_number": "12345678",
                 "platform": "MT5",
                 "server": "DemoServer",
-                "leverage": 1
+                "leverage": 1,
             }
         }
 
@@ -157,6 +158,7 @@ class ClientListResponse(BaseModel):
 
 # ========== Endpoints ==========
 
+
 @router.post("/", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 async def create_client(
     payload: ClientCreate,
@@ -164,24 +166,40 @@ async def create_client(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create new client. Requires: clients.create"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "clients", "create", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "clients", "create", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    if payload.assigned_user_id and not await db.scalar(select(User).where(User.id == payload.assigned_user_id, User.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="Assigned user is invalid for this tenant")
-    if payload.campaign_id and not await db.scalar(select(Campaign).where(Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="Campaign is invalid for this tenant")
-    if payload.ib_partner_id and not await db.scalar(select(IbPartner).where(IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="IB partner is invalid for this tenant")
-    
+    if payload.assigned_user_id and not await db.scalar(
+        select(User).where(
+            User.id == payload.assigned_user_id, User.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="Assigned user is invalid for this tenant"
+        )
+    if payload.campaign_id and not await db.scalar(
+        select(Campaign).where(
+            Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="Campaign is invalid for this tenant"
+        )
+    if payload.ib_partner_id and not await db.scalar(
+        select(IbPartner).where(
+            IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="IB partner is invalid for this tenant"
+        )
+
     # Check if email already exists
     result = await db.execute(
         select(Client).where(
@@ -190,10 +208,9 @@ async def create_client(
     )
     if result.scalar():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="Email already exists"
         )
-    
+
     client = Client(
         tenant_id=tenant_id,
         first_name=payload.first_name,
@@ -208,18 +225,18 @@ async def create_client(
         campaign_id=payload.campaign_id,
         ib_partner_id=payload.ib_partner_id,
     )
-    
+
     db.add(client)
     await db.commit()
     await db.refresh(client)
-    
+
     # Create financials record
     financials = ClientFinancials(
         tenant_id=tenant_id,
         client_id=client.id,
     )
     db.add(financials)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -231,7 +248,7 @@ async def create_client(
     )
     db.add(activity)
     await db.commit()
-    
+
     return client
 
 
@@ -248,20 +265,20 @@ async def list_clients(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """List clients with filtering. Requires: clients.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "clients", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     query = select(Client).where(
         (Client.tenant_id == tenant_id) & (Client.is_archived == is_archived)
     )
-    
+
     if search:
         search_term = f"%{search}%"
         query = query.where(
@@ -270,28 +287,28 @@ async def list_clients(
             | (Client.last_name.ilike(search_term))
             | (Client.phone.ilike(search_term))
         )
-    
+
     if status:
         query = query.where(Client.status == status)
-    
+
     if country:
         query = query.where(Client.country == country)
-    
+
     if assigned_to_id:
         query = query.where(Client.assigned_user_id == assigned_to_id)
-    
+
     # Count total
     count_query = query
     count_result = await db.execute(count_query)
     total = len(count_result.scalars().all())
-    
+
     # Paginate
     offset = (page - 1) * limit
     query = query.order_by(desc(Client.created_at)).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     clients = result.scalars().all()
-    
+
     return {
         "total": total,
         "page": page,
@@ -307,38 +324,36 @@ async def get_client(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get client details with accounts and financials. Requires: clients.view"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "clients", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Client).where(
-            (Client.id == client_id) & (Client.tenant_id == tenant_id)
-        )
+        select(Client).where((Client.id == client_id) & (Client.tenant_id == tenant_id))
     )
     client = result.scalar()
-    
+
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Get accounts
     result = await db.execute(
         select(ClientAccount).where(ClientAccount.client_id == client_id)
     )
     accounts = result.scalars().all()
-    
+
     # Get financials
     result = await db.execute(
         select(ClientFinancials).where(ClientFinancials.client_id == client_id)
     )
     financials = result.scalar()
-    
+
     return ClientDetailResponse(
         **{**client.__dict__, "accounts": accounts, "financials": financials}
     )
@@ -352,48 +367,62 @@ async def update_client(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Update client. Requires: clients.edit"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "clients", "edit", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "clients", "edit", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Client).where(
-            (Client.id == client_id) & (Client.tenant_id == tenant_id)
-        )
+        select(Client).where((Client.id == client_id) & (Client.tenant_id == tenant_id))
     )
     client = result.scalar()
-    
+
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    if payload.assigned_user_id and not await db.scalar(select(User).where(User.id == payload.assigned_user_id, User.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="Assigned user is invalid for this tenant")
-    if payload.campaign_id and not await db.scalar(select(Campaign).where(Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="Campaign is invalid for this tenant")
-    if payload.ib_partner_id and not await db.scalar(select(IbPartner).where(IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id)):
-        raise HTTPException(status_code=400, detail="IB partner is invalid for this tenant")
-    
+    if payload.assigned_user_id and not await db.scalar(
+        select(User).where(
+            User.id == payload.assigned_user_id, User.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="Assigned user is invalid for this tenant"
+        )
+    if payload.campaign_id and not await db.scalar(
+        select(Campaign).where(
+            Campaign.id == payload.campaign_id, Campaign.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="Campaign is invalid for this tenant"
+        )
+    if payload.ib_partner_id and not await db.scalar(
+        select(IbPartner).where(
+            IbPartner.id == payload.ib_partner_id, IbPartner.tenant_id == tenant_id
+        )
+    ):
+        raise HTTPException(
+            status_code=400, detail="IB partner is invalid for this tenant"
+        )
+
     # Track changes
     changes = []
-    
+
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         old_value = getattr(client, key)
         if old_value != value:
             changes.append(f"{key}: {old_value} -> {value}")
         setattr(client, key, value)
-    
+
     client.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(client)
-    
+
     # Log activity if there were changes
     if changes:
         activity = Activity(
@@ -406,7 +435,7 @@ async def update_client(
         )
         db.add(activity)
         await db.commit()
-    
+
     return client
 
 
@@ -417,30 +446,26 @@ async def archive_client(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Archive client (soft delete). Requires: clients.delete"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "clients", "delete", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "clients", "delete", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Client).where(
-            (Client.id == client_id) & (Client.tenant_id == tenant_id)
-        )
+        select(Client).where((Client.id == client_id) & (Client.tenant_id == tenant_id))
     )
     client = result.scalar()
-    
+
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     client.is_archived = True
     await db.commit()
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -456,7 +481,12 @@ async def archive_client(
 
 # ========== Client Accounts ==========
 
-@router.post("/{client_id}/accounts", response_model=ClientAccountResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{client_id}/accounts",
+    response_model=ClientAccountResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_client_account(
     client_id: UUID,
     payload: AddAccount,
@@ -464,18 +494,18 @@ async def add_client_account(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Add trading account to client"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify client exists
     result = await db.execute(
-        select(Client).where(
-            (Client.id == client_id) & (Client.tenant_id == tenant_id)
-        )
+        select(Client).where((Client.id == client_id) & (Client.tenant_id == tenant_id))
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
     # Check if account number already exists
     result = await db.execute(
         select(ClientAccount).where(
@@ -485,10 +515,9 @@ async def add_client_account(
     )
     if result.scalar():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Account number already exists"
+            status_code=status.HTTP_409_CONFLICT, detail="Account number already exists"
         )
-    
+
     account = ClientAccount(
         tenant_id=tenant_id,
         client_id=client_id,
@@ -497,11 +526,11 @@ async def add_client_account(
         server=payload.server,
         leverage=payload.leverage,
     )
-    
+
     db.add(account)
     await db.commit()
     await db.refresh(account)
-    
+
     return account
 
 
@@ -512,18 +541,18 @@ async def get_client_accounts(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get all accounts for client"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify client exists
     result = await db.execute(
-        select(Client).where(
-            (Client.id == client_id) & (Client.tenant_id == tenant_id)
-        )
+        select(Client).where((Client.id == client_id) & (Client.tenant_id == tenant_id))
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+
     result = await db.execute(
         select(ClientAccount).where(ClientAccount.client_id == client_id)
     )
@@ -539,9 +568,9 @@ async def update_client_account(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Update account details"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(ClientAccount).where(
             (ClientAccount.id == account_id)
@@ -550,22 +579,24 @@ async def update_client_account(
         )
     )
     account = result.scalar()
-    
+
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(account, key, value)
-    
+
     account.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(account)
-    
+
     return account
 
 
-@router.delete("/{client_id}/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{client_id}/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_client_account(
     client_id: UUID,
     account_id: UUID,
@@ -573,9 +604,9 @@ async def delete_client_account(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Delete client account"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(ClientAccount).where(
             (ClientAccount.id == account_id)
@@ -584,9 +615,9 @@ async def delete_client_account(
         )
     )
     account = result.scalar()
-    
+
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     await db.delete(account)
     await db.commit()
