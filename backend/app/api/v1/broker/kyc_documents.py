@@ -151,7 +151,7 @@ async def reject_kyc_document(
     document_id: str,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
-    _=Depends(require_permission("kyc.approve")),
+    _=Depends(require_permission("kyc.reject")),
 ):
     """Reject KYC document"""
     result = await db.execute(

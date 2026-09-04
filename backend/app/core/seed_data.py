@@ -17,7 +17,7 @@ from app.models import (
 
 class SeedDataInitializer:
     """Initialize default configuration for new tenants."""
-    
+
     # Standard permissions
     STANDARD_PERMISSIONS = {
         # Lead permissions
@@ -26,49 +26,47 @@ class SeedDataInitializer:
         "leads.edit": "Edit leads",
         "leads.delete": "Delete leads",
         "leads.export": "Export leads",
-        
         # Client permissions
         "clients.view": "View clients",
         "clients.create": "Create clients",
         "clients.edit": "Edit clients",
         "clients.delete": "Delete clients",
         "clients.export": "Export clients",
-        
         # Deposit permissions
         "deposits.view": "View deposits",
         "deposits.create": "Create deposits",
         "deposits.approve": "Approve deposits",
         "deposits.reject": "Reject deposits",
         "deposits.export": "Export deposits",
-        
         # Withdrawal permissions
         "withdrawals.view": "View withdrawals",
         "withdrawals.create": "Create withdrawals",
         "withdrawals.approve": "Approve withdrawals",
         "withdrawals.reject": "Reject withdrawals",
         "withdrawals.export": "Export withdrawals",
-        
         # KYC permissions
         "kyc.view": "View KYC documents",
-        "kyc.create": "Create KYC documents",
+        "kyc.upload": "Upload KYC documents",
         "kyc.approve": "Approve KYC",
         "kyc.reject": "Reject KYC",
-        
         # IB permissions
         "ib.view": "View IBs",
         "ib.create": "Create IBs",
         "ib.edit": "Edit IBs",
         "ib.delete": "Delete IBs",
-        
         # Report permissions
         "reports.view": "View reports",
         "reports.create": "Create reports",
-        
         # Settings permissions
         "settings.manage": "Manage settings",
         "users.manage": "Manage users",
+        # Workflow permissions
+        "workflows.view": "View workflows",
+        "workflows.create": "Create workflows",
+        "workflows.edit": "Edit workflows",
+        "workflows.delete": "Delete workflows",
     }
-    
+
     # Default roles
     DEFAULT_ROLES = {
         "SUPER_ADMIN": {
@@ -82,8 +80,14 @@ class SeedDataInitializer:
         "MANAGER": {
             "description": "Team and lead management",
             "permissions": [
-                "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.export",
-                "clients.view", "clients.create", "clients.edit",
+                "leads.view",
+                "leads.create",
+                "leads.edit",
+                "leads.delete",
+                "leads.export",
+                "clients.view",
+                "clients.create",
+                "clients.edit",
                 "users.manage",
                 "reports.view",
             ],
@@ -91,27 +95,46 @@ class SeedDataInitializer:
         "SALES": {
             "description": "Sales operations",
             "permissions": [
-                "leads.view", "leads.create", "leads.edit", "leads.export",
-                "clients.view", "clients.create", "clients.edit",
-                "deposits.view", "deposits.create",
+                "leads.view",
+                "leads.create",
+                "leads.edit",
+                "leads.export",
+                "clients.view",
+                "clients.create",
+                "clients.edit",
+                "deposits.view",
+                "deposits.create",
                 "reports.view",
             ],
         },
         "COMPLIANCE": {
             "description": "Compliance and KYC",
             "permissions": [
-                "kyc.view", "kyc.approve", "kyc.reject",
+                "kyc.view",
+                "kyc.approve",
+                "kyc.reject",
+                "kyc.upload",
                 "clients.view",
-                "deposits.view", "deposits.approve", "deposits.reject",
-                "withdrawals.view", "withdrawals.approve", "withdrawals.reject",
+                "deposits.view",
+                "deposits.approve",
+                "deposits.reject",
+                "withdrawals.view",
+                "withdrawals.approve",
+                "withdrawals.reject",
                 "reports.view",
             ],
         },
         "FINANCE": {
             "description": "Financial operations",
             "permissions": [
-                "deposits.view", "deposits.approve", "deposits.reject", "deposits.export",
-                "withdrawals.view", "withdrawals.approve", "withdrawals.reject", "withdrawals.export",
+                "deposits.view",
+                "deposits.approve",
+                "deposits.reject",
+                "deposits.export",
+                "withdrawals.view",
+                "withdrawals.approve",
+                "withdrawals.reject",
+                "withdrawals.export",
                 "clients.view",
                 "reports.view",
             ],
@@ -119,18 +142,20 @@ class SeedDataInitializer:
         "IB_MANAGER": {
             "description": "IB partner management",
             "permissions": [
-                "ib.view", "ib.create", "ib.edit",
+                "ib.view",
+                "ib.create",
+                "ib.edit",
                 "clients.view",
                 "reports.view",
             ],
         },
     }
-    
+
     @staticmethod
     async def initialize_tenant(db: AsyncSession, tenant_id: UUID) -> None:
         """
         Initialize default seed data for a new tenant.
-        
+
         Creates:
         - Default roles
         - Standard permissions
@@ -139,13 +164,12 @@ class SeedDataInitializer:
         # Check if already initialized
         existing = await db.scalar(
             select(DynamicRole).where(
-                DynamicRole.tenant_id == tenant_id,
-                DynamicRole.name == "SUPER_ADMIN"
+                DynamicRole.tenant_id == tenant_id, DynamicRole.name == "SUPER_ADMIN"
             )
         )
         if existing:
             return  # Already initialized
-        
+
         # Create permissions
         permissions_map: dict[str, DynamicPermission] = {}
         for perm_code, perm_desc in SeedDataInitializer.STANDARD_PERMISSIONS.items():
@@ -159,7 +183,7 @@ class SeedDataInitializer:
             db.add(perm)
             await db.flush()
             permissions_map[perm_code] = perm
-        
+
         # Create roles
         for role_name, role_config in SeedDataInitializer.DEFAULT_ROLES.items():
             role = DynamicRole(
@@ -167,10 +191,11 @@ class SeedDataInitializer:
                 name=role_name,
                 description=role_config["description"],
                 is_system=True,
+                is_default=True,
             )
             db.add(role)
             await db.flush()
-            
+
             # Assign permissions to role
             for perm_code in role_config["permissions"]:
                 perm = permissions_map[perm_code]
@@ -179,7 +204,7 @@ class SeedDataInitializer:
                     permission_id=perm.id,
                 )
                 db.add(role_perm)
-        
+
         # Create default lead pipeline
         lead_pipeline = Pipeline(
             tenant_id=tenant_id,
@@ -190,7 +215,7 @@ class SeedDataInitializer:
         )
         db.add(lead_pipeline)
         await db.flush()
-        
+
         # Create pipeline stages
         stages_data = [
             ("New Lead", "#3B82F6", 0, False),
@@ -202,7 +227,7 @@ class SeedDataInitializer:
             ("Won", "#34D399", 6, True),
             ("Lost", "#EF4444", 7, True),
         ]
-        
+
         for stage_name, color, order, is_terminal in stages_data:
             stage = PipelineStage(
                 pipeline_id=lead_pipeline.id,
@@ -212,7 +237,7 @@ class SeedDataInitializer:
                 is_terminal=is_terminal,
             )
             db.add(stage)
-        
+
         # Create default client pipeline
         client_pipeline = Pipeline(
             tenant_id=tenant_id,
@@ -223,7 +248,7 @@ class SeedDataInitializer:
         )
         db.add(client_pipeline)
         await db.flush()
-        
+
         # Create client pipeline stages
         client_stages = [
             ("Prospect", "#3B82F6", 0, False),
@@ -234,7 +259,7 @@ class SeedDataInitializer:
             ("Inactive", "#6B7280", 5, True),
             ("Closed", "#EF4444", 6, True),
         ]
-        
+
         for stage_name, color, order, is_terminal in client_stages:
             stage = PipelineStage(
                 pipeline_id=client_pipeline.id,
@@ -244,5 +269,5 @@ class SeedDataInitializer:
                 is_terminal=is_terminal,
             )
             db.add(stage)
-        
+
         await db.commit()

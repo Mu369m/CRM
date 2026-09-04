@@ -4,6 +4,7 @@ Role and permission management API endpoints.
 Allows brokers to create custom roles and manage permissions.
 """
 
+from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
 
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 # ========== Schemas ==========
 
+
 class CreateRole(BaseModel):
     name: str
     description: Optional[str] = None
@@ -35,7 +37,7 @@ class CreateRole(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "Sales Manager",
-                "description": "Can manage sales team and leads"
+                "description": "Can manage sales team and leads",
             }
         }
 
@@ -49,8 +51,9 @@ class DynamicRoleResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     is_system: bool
+    is_default: bool = False
     permission_count: int = 0
     created_at: datetime
 
@@ -62,7 +65,7 @@ class PermissionResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     code: str
-    description: Optional[str]
+    description: Optional[str] = None
     module: str
     action: str
     created_at: datetime
@@ -77,34 +80,37 @@ class RoleDetailResponse(DynamicRoleResponse):
 
 # ========== Endpoints ==========
 
-@router.post("/", response_model=DynamicRoleResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/", response_model=DynamicRoleResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_role(
     payload: CreateRole,
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Create custom role. Requires: settings.manage"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     role = DynamicRole(
         tenant_id=tenant_id,
         name=payload.name,
         description=payload.description,
         is_system=False,
     )
-    
+
     db.add(role)
     await db.commit()
     await db.refresh(role)
-    
+
     return role
 
 
@@ -114,12 +120,14 @@ async def list_roles(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """List all roles for tenant"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
 
-    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+    if not await check_permission(
+        UUID(claims["sub"]), "settings", "manage", db, tenant_id
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(DynamicRole).where(DynamicRole.tenant_id == tenant_id)
     )
@@ -133,22 +141,24 @@ async def get_role(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get role with permissions"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
 
-    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+    if not await check_permission(
+        UUID(claims["sub"]), "settings", "manage", db, tenant_id
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(DynamicRole).where(
             (DynamicRole.id == role_id) & (DynamicRole.tenant_id == tenant_id)
         )
     )
     role = result.scalar()
-    
+
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Get permissions for this role
     result = await db.execute(
         select(DynamicPermission)
@@ -157,10 +167,8 @@ async def get_role(
         .where(DynamicPermission.tenant_id == tenant_id)
     )
     permissions = result.scalars().all()
-    
-    response = RoleDetailResponse(
-        **{**role.__dict__, "permissions": permissions}
-    )
+
+    response = RoleDetailResponse(**{**role.__dict__, "permissions": permissions})
     return response
 
 
@@ -172,40 +180,39 @@ async def update_role(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Update role"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(DynamicRole).where(
             (DynamicRole.id == role_id) & (DynamicRole.tenant_id == tenant_id)
         )
     )
     role = result.scalar()
-    
+
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Cannot edit default roles
     if role.is_default:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify default roles"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify default roles"
         )
-    
+
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(role, key, value)
-    
+
     await db.commit()
     await db.refresh(role)
-    
+
     return role
 
 
@@ -216,37 +223,37 @@ async def delete_role(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Delete role (cannot delete default roles)"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(DynamicRole).where(
             (DynamicRole.id == role_id) & (DynamicRole.tenant_id == tenant_id)
         )
     )
     role = result.scalar()
-    
+
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     if role.is_system:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete default roles"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete default roles"
         )
-    
+
     await db.delete(role)
     await db.commit()
 
 
 # ========== Permissions ==========
+
 
 @router.get("/available/permissions", response_model=List[PermissionResponse])
 async def get_available_permissions(
@@ -254,19 +261,23 @@ async def get_available_permissions(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get all available permissions"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
 
-    if not await check_permission(UUID(claims["sub"]), "settings", "manage", db, tenant_id):
+    if not await check_permission(
+        UUID(claims["sub"]), "settings", "manage", db, tenant_id
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(DynamicPermission).where(DynamicPermission.tenant_id == tenant_id)
     )
     return result.scalars().all()
 
 
-@router.post("/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def grant_permission(
     role_id: UUID,
     permission_id: UUID,
@@ -274,16 +285,16 @@ async def grant_permission(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Grant permission to role"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Verify role exists
     result = await db.execute(
         select(DynamicRole).where(
@@ -291,8 +302,10 @@ async def grant_permission(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
+        )
+
     # Verify permission exists
     result = await db.execute(
         select(DynamicPermission).where(
@@ -304,7 +317,7 @@ async def grant_permission(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found"
         )
-    
+
     # Check if already granted
     result = await db.execute(
         select(RolePermission).where(
@@ -314,10 +327,9 @@ async def grant_permission(
     )
     if result.scalar():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Permission already granted"
+            status_code=status.HTTP_409_CONFLICT, detail="Permission already granted"
         )
-    
+
     # Grant permission
     role_perm = RolePermission(
         role_id=role_id,
@@ -327,7 +339,9 @@ async def grant_permission(
     await db.commit()
 
 
-@router.delete("/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{role_id}/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def revoke_permission(
     role_id: UUID,
     permission_id: UUID,
@@ -335,16 +349,16 @@ async def revoke_permission(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Revoke permission from role"""
-    
+
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "settings", "manage", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
         select(RolePermission).where(
             (RolePermission.role_id == role_id)
@@ -352,9 +366,9 @@ async def revoke_permission(
         )
     )
     role_perm = result.scalar()
-    
+
     if not role_perm:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     await db.delete(role_perm)
     await db.commit()

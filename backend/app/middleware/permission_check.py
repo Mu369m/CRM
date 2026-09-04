@@ -25,36 +25,40 @@ async def check_permission(
 ) -> bool:
     """
     Check if user has permission for resource action.
-    
+
     Args:
         user_id: User ID
         resource: Resource name (leads, clients, deposits, etc.)
         action: Action name (view, create, edit, delete, approve, reject)
         db: Database session
         tenant_id: Tenant ID
-        
+
     Returns:
         True if user has permission, False otherwise
-        
+
     Examples:
         check_permission(user_id, "leads", "create", db, tenant_id)
         check_permission(user_id, "deposits", "approve", db, tenant_id)
     """
-    
+
     # Get all roles for user
     result = await db.execute(
-        select(UserDynamicRole).join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id).where((UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id))
+        select(UserDynamicRole)
+        .join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id)
+        .where(
+            (UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id)
+        )
     )
     user_roles = result.scalars().all()
-    
+
     if not user_roles:
         return False
-    
+
     role_ids = [ur.role_id for ur in user_roles]
-    
+
     # Build permission string
     permission_name = f"{resource}.{action}"
-    
+
     # Check if any of user's roles have this permission
     result = await db.execute(
         select(RolePermission)
@@ -65,7 +69,7 @@ async def check_permission(
             & (DynamicPermission.tenant_id == tenant_id)
         )
     )
-    
+
     return result.scalar() is not None
 
 
@@ -76,22 +80,26 @@ async def get_user_permissions(
 ) -> set[str]:
     """
     Get all permissions for a user.
-    
+
     Returns:
         Set of permission names like {'leads.view', 'leads.create', ...}
     """
-    
+
     # Get user's roles
     result = await db.execute(
-        select(UserDynamicRole).join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id).where((UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id))
+        select(UserDynamicRole)
+        .join(DynamicRole, DynamicRole.id == UserDynamicRole.role_id)
+        .where(
+            (UserDynamicRole.user_id == user_id) & (DynamicRole.tenant_id == tenant_id)
+        )
     )
     user_roles = result.scalars().all()
-    
+
     if not user_roles:
         return set()
-    
+
     role_ids = [ur.role_id for ur in user_roles]
-    
+
     # Get all permissions for these roles
     result = await db.execute(
         select(DynamicPermission)
@@ -101,7 +109,7 @@ async def get_user_permissions(
             & (DynamicPermission.tenant_id == tenant_id)
         )
     )
-    
+
     permissions = result.scalars().all()
     return {p.code for p in permissions}
 
@@ -114,44 +122,43 @@ STANDARD_PERMISSIONS = [
     "leads.edit",
     "leads.delete",
     "leads.export",
-    
     # Client permissions
     "clients.view",
     "clients.create",
     "clients.edit",
     "clients.delete",
     "clients.export",
-    
     # Deposit permissions
     "deposits.view",
     "deposits.create",
     "deposits.approve",
     "deposits.reject",
     "deposits.export",
-    
     # Withdrawal permissions
     "withdrawals.view",
     "withdrawals.create",
     "withdrawals.approve",
     "withdrawals.reject",
     "withdrawals.export",
-    
     # KYC permissions
     "kyc.view",
+    "kyc.upload",
     "kyc.approve",
     "kyc.reject",
-    
     # IB permissions
     "ib.view",
     "ib.create",
     "ib.edit",
     "ib.delete",
-    
     # Report permissions
     "reports.view",
     "reports.create",
-    
     # Settings permissions
     "settings.manage",
     "users.manage",
+    # Workflow permissions
+    "workflows.view",
+    "workflows.create",
+    "workflows.edit",
+    "workflows.delete",
 ]
