@@ -10,6 +10,7 @@ import {
   Zap,
   Palette,
   Database,
+  Sparkles,
 } from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
@@ -25,12 +26,24 @@ interface BrokerRole {
   description?: string;
 }
 
+interface BrokerFeature {
+  feature_key: string;
+  name: string;
+  feature_type: string;
+  version: string;
+  status: string;
+  configuration: Record<string, unknown>;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
 const tabs: TabConfig[] = [
   { id: "general", label: "General Settings", icon: Settings },
   { id: "roles", label: "Roles & Permissions", icon: Users },
   { id: "branding", label: "Branding", icon: Palette },
   { id: "fields", label: "Custom Fields", icon: Database },
   { id: "pipelines", label: "Pipelines", icon: Zap },
+  { id: "features", label: "Features", icon: Sparkles },
 ];
 
 export default function BrokerAdminPage() {
@@ -95,10 +108,76 @@ export default function BrokerAdminPage() {
             {activeTab === "pipelines" && (
               <PipelinesTab onMessage={setMessage} />
             )}
+            {activeTab === "features" && <FeaturesTab />}
           </div>
         </div>
       </main>
     </MainLayout>
+  );
+}
+
+function FeaturesTab() {
+  const [features, setFeatures] = useState<BrokerFeature[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token") ?? "";
+    fetch("/api/v1/broker/features", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load enabled features.");
+        return (await response.json()) as BrokerFeature[];
+      })
+      .then(setFeatures)
+      .catch((reason: unknown) =>
+        setError(
+          reason instanceof Error ? reason.message : "Unable to load features.",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Enabled Features</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Features granted to this broker by the platform owner.
+        </p>
+      </div>
+      {loading && <p className="text-sm text-slate-500">Loading features...</p>}
+      {!loading && error && (
+        <div className="rounded border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+          {error}
+        </div>
+      )}
+      {!loading && !error && features.length === 0 && (
+        <div className="rounded border border-slate-700 bg-slate-800/30 p-4 text-sm text-slate-400">
+          No additional platform features are enabled for this broker.
+        </div>
+      )}
+      <div className="space-y-3">
+        {features.map((feature) => (
+          <div
+            key={feature.feature_key}
+            className="flex flex-col gap-3 rounded border border-slate-700 bg-slate-800/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <p className="font-medium text-white">{feature.name}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {feature.feature_key} · v{feature.version} ·{" "}
+                {feature.feature_type}
+              </p>
+            </div>
+            <span className="w-fit rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
+              {feature.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
