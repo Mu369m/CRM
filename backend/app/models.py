@@ -110,6 +110,7 @@ class Tenant(Base):
         String(160), unique=True, nullable=True
     )
     is_active: Mapped[bool] = mapped_column(default=True)
+    plan: Mapped[str] = mapped_column(String(30), default="STARTER", index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -120,6 +121,27 @@ class Tenant(Base):
     )
     branding: Mapped["TenantBranding | None"] = relationship(
         back_populates="tenant", uselist=False
+    )
+
+
+class ViewAsBrokerSessionRecord(Base):
+    __tablename__ = "view_as_broker_sessions"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    admin_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="RESTRICT"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 

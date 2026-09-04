@@ -22,7 +22,7 @@ Use controlled VIEW_AS_BROKER for investigation only.
 All sensitive actions are audited.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Optional
@@ -32,11 +32,12 @@ from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.models import Tenant, User, AuditLog, Role
+from app.models import AuditLog, Role, Tenant, User, ViewAsBrokerSessionRecord
 
 
 class BrokerStatus(StrEnum):
     """Broker subscription status."""
+
     ACTIVE = "ACTIVE"
     GRACE_PERIOD = "GRACE_PERIOD"  # Payment overdue
     SUSPENDED = "SUSPENDED"  # Admin suspended
@@ -46,6 +47,7 @@ class BrokerStatus(StrEnum):
 
 class BrokerPlan(StrEnum):
     """Broker subscription plans."""
+
     STARTER = "STARTER"
     PROFESSIONAL = "PROFESSIONAL"
     ENTERPRISE = "ENTERPRISE"
@@ -53,7 +55,7 @@ class BrokerPlan(StrEnum):
 
 class ViewAsBrokerSession:
     """Tracks Master Admin VIEW_AS_BROKER session."""
-    
+
     def __init__(
         self,
         session_id: UUID,
@@ -73,19 +75,20 @@ class ViewAsBrokerSession:
 
 class BrokerHealthStatus(BaseModel):
     """Health status of a broker's system."""
+
     broker_id: UUID
     status: str  # OK, WARNING, ERROR
     last_check_at: datetime
-    
+
     api_health: str  # OK, ERROR
     database_health: str  # OK, ERROR
     payment_gateway_health: str  # OK, ERROR
     trading_platform_health: str  # OK, ERROR
-    
+
     pending_withdrawals_count: int
     failed_jobs_count: int
     failed_webhooks_count: int
-    
+
     last_activity_at: Optional[datetime]
     alerts: list[str]
 
@@ -99,38 +102,34 @@ async def start_view_as_broker_session(
 ) -> ViewAsBrokerSession:
     """
     Start impersonation session for investigation.
-    
+
     Prerequisites:
     - Admin must be SUPER_ADMIN
     - Broker must exist and be a valid tenant
     - Session is logged and limited duration
-    
+
     Returns ViewAsBrokerSession with expiry time.
     """
-    
+
     # Verify admin is SUPER_ADMIN
-    admin_user = await db.execute(
-        select(User).where(User.id == admin_id)
-    )
+    admin_user = await db.execute(select(User).where(User.id == admin_id))
     admin_user = admin_user.scalar_one_or_none()
-    
+
     if not admin_user or admin_user.role != Role.SUPER_ADMIN:
         raise ValueError("Only SUPER_ADMIN can use VIEW_AS_BROKER")
-    
+
     # Verify tenant exists
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
+    tenant = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant.scalar_one_or_none()
-    
+
     if not tenant:
         raise ValueError("Tenant not found")
-    
+
     # Create session
     session_id = uuid4()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=duration_minutes)
-    
+
     session = ViewAsBrokerSession(
         session_id=session_id,
         admin_id=admin_id,
@@ -139,22 +138,33 @@ async def start_view_as_broker_session(
         expires_at=expires_at,
         reason=reason,
     )
-    
+    db.add(
+        ViewAsBrokerSessionRecord(
+            id=session_id,
+            admin_id=admin_id,
+            tenant_id=tenant_id,
+            created_at=now,
+            expires_at=expires_at,
+        )
+    )
+
     # Audit log
     audit_log = AuditLog(
         tenant_id=tenant_id,
         actor_id=admin_id,
         action="VIEW_AS_BROKER_STARTED",
-        metadata_json=str({
-            "session_id": str(session_id),
-            "reason": reason,
-            "duration_minutes": duration_minutes,
-            "expires_at": expires_at.isoformat(),
-        }),
+        metadata_json=str(
+            {
+                "session_id": str(session_id),
+                "reason": reason,
+                "duration_minutes": duration_minutes,
+                "expires_at": expires_at.isoformat(),
+            }
+        ),
     )
     db.add(audit_log)
     await db.commit()
-    
+
     return session
 
 
@@ -164,20 +174,29 @@ async def end_view_as_broker_session(
 ) -> None:
     """
     End impersonation session.
-    
+
     All actions during session are audited.
     """
-    
-    # This would query a sessions table in real implementation
-    # For now, just audit the end
-    
+
+    record = await db.scalar(
+        select(ViewAsBrokerSessionRecord).where(
+            ViewAsBrokerSessionRecord.id == session_id,
+            ViewAsBrokerSessionRecord.ended_at.is_(None),
+        )
+    )
+    if not record:
+        raise ValueError("VIEW_AS_BROKER session not found or already ended")
+    record.ended_at = datetime.now(UTC)
+
     audit_log = AuditLog(
-        tenant_id=UUID("00000000-0000-0000-0000-000000000000"),
-        actor_id=UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=record.tenant_id,
+        actor_id=record.admin_id,
         action="VIEW_AS_BROKER_ENDED",
-        metadata_json=str({
-            "session_id": str(session_id),
-        }),
+        metadata_json=str(
+            {
+                "session_id": str(session_id),
+            }
+        ),
     )
     db.add(audit_log)
     await db.commit()
@@ -189,13 +208,17 @@ async def validate_view_as_broker_session(
 ) -> bool:
     """
     Validate session is still active.
-    
+
     Sessions expire after duration.
     Must be valid to continue impersonation.
     """
-    # Check against sessions table
-    # For now, always return True for implementation
-    return True
+    record = await db.scalar(
+        select(ViewAsBrokerSessionRecord).where(
+            ViewAsBrokerSessionRecord.id == session_id,
+            ViewAsBrokerSessionRecord.ended_at.is_(None),
+        )
+    )
+    return bool(record and record.expires_at > datetime.now(UTC))
 
 
 async def create_broker(
@@ -207,11 +230,11 @@ async def create_broker(
 ) -> Tenant:
     """
     Create new broker tenant.
-    
+
     Prerequisites:
     - Admin must be SUPER_ADMIN
     - Subdomain must be unique
-    
+
     Workflow:
     1. Create tenant
     2. Create tenant settings
@@ -219,19 +242,17 @@ async def create_broker(
     4. Create broker admin user
     5. Assign plan/entitlements
     6. Audit log
-    
+
     Returns: Tenant object
     """
-    
+
     # Verify admin
-    admin_user = await db.execute(
-        select(User).where(User.id == admin_id)
-    )
+    admin_user = await db.execute(select(User).where(User.id == admin_id))
     admin_user = admin_user.scalar_one_or_none()
-    
+
     if not admin_user or admin_user.role != Role.SUPER_ADMIN:
         raise ValueError("Only SUPER_ADMIN can create brokers")
-    
+
     # Create tenant
     tenant = Tenant(
         name=name,
@@ -240,23 +261,25 @@ async def create_broker(
     )
     db.add(tenant)
     await db.flush()
-    
+
     # Audit log
     audit_log = AuditLog(
         tenant_id=tenant.id,
         actor_id=admin_id,
         action="BROKER_CREATED",
-        metadata_json=str({
-            "tenant_id": str(tenant.id),
-            "name": name,
-            "subdomain": subdomain,
-            "plan": plan,
-        }),
+        metadata_json=str(
+            {
+                "tenant_id": str(tenant.id),
+                "name": name,
+                "subdomain": subdomain,
+                "plan": plan,
+            }
+        ),
     )
     db.add(audit_log)
-    
+
     await db.commit()
-    
+
     return tenant
 
 
@@ -268,46 +291,44 @@ async def suspend_broker(
 ) -> Tenant:
     """
     Suspend broker (prevent operations).
-    
+
     Does NOT delete data.
     Preserves all business records.
     Can be reactivated later.
     """
-    
+
     # Verify admin
-    admin_user = await db.execute(
-        select(User).where(User.id == admin_id)
-    )
+    admin_user = await db.execute(select(User).where(User.id == admin_id))
     admin_user = admin_user.scalar_one_or_none()
-    
+
     if not admin_user or admin_user.role != Role.SUPER_ADMIN:
         raise ValueError("Only SUPER_ADMIN can suspend brokers")
-    
+
     # Get tenant
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
+    tenant = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant.scalar_one_or_none()
-    
+
     if not tenant:
         raise ValueError("Tenant not found")
-    
+
     # Suspend
     tenant.is_active = False
-    
+
     # Audit log
     audit_log = AuditLog(
         tenant_id=tenant_id,
         actor_id=admin_id,
         action="BROKER_SUSPENDED",
-        metadata_json=str({
-            "reason": reason,
-        }),
+        metadata_json=str(
+            {
+                "reason": reason,
+            }
+        ),
     )
     db.add(audit_log)
-    
+
     await db.commit()
-    
+
     return tenant
 
 
@@ -318,50 +339,48 @@ async def reactivate_broker(
 ) -> Tenant:
     """
     Reactivate suspended broker.
-    
+
     Verifies:
     - Subscription is current
     - Integrations are configured
     - Background jobs are running
     - All systems are ready
-    
+
     Does NOT lose historical data.
     """
-    
+
     # Verify admin
-    admin_user = await db.execute(
-        select(User).where(User.id == admin_id)
-    )
+    admin_user = await db.execute(select(User).where(User.id == admin_id))
     admin_user = admin_user.scalar_one_or_none()
-    
+
     if not admin_user or admin_user.role != Role.SUPER_ADMIN:
         raise ValueError("Only SUPER_ADMIN can reactivate brokers")
-    
+
     # Get tenant
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
+    tenant = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant.scalar_one_or_none()
-    
+
     if not tenant:
         raise ValueError("Tenant not found")
-    
+
     # Reactivate
     tenant.is_active = True
-    
+
     # Audit log
     audit_log = AuditLog(
         tenant_id=tenant_id,
         actor_id=admin_id,
         action="BROKER_REACTIVATED",
-        metadata_json=str({
-            "reactivated_at": datetime.utcnow().isoformat(),
-        }),
+        metadata_json=str(
+            {
+                "reactivated_at": datetime.now(UTC).isoformat(),
+            }
+        ),
     )
     db.add(audit_log)
-    
+
     await db.commit()
-    
+
     return tenant
 
 
@@ -371,7 +390,7 @@ async def get_broker_health(
 ) -> BrokerHealthStatus:
     """
     Get health status of broker system.
-    
+
     Checks:
     - API availability
     - Database connectivity
@@ -380,26 +399,24 @@ async def get_broker_health(
     - Pending operations
     - Failed jobs/webhooks
     - Last activity time
-    
+
     Returns: BrokerHealthStatus with overall status
     """
-    
+
     # Verify tenant exists
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
+    tenant = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant.scalar_one_or_none()
-    
+
     if not tenant:
         raise ValueError("Tenant not found")
-    
+
     # Collect health data
     # This would query various system tables
-    
+
     health = BrokerHealthStatus(
         broker_id=tenant_id,
         status="OK",
-        last_check_at=datetime.utcnow(),
+        last_check_at=datetime.now(UTC),
         api_health="OK",
         database_health="OK",
         payment_gateway_health="OK",
@@ -407,10 +424,10 @@ async def get_broker_health(
         pending_withdrawals_count=0,
         failed_jobs_count=0,
         failed_webhooks_count=0,
-        last_activity_at=datetime.utcnow(),
+        last_activity_at=datetime.now(UTC),
         alerts=[],
     )
-    
+
     return health
 
 
@@ -422,45 +439,42 @@ async def assign_plan(
 ) -> Tenant:
     """
     Assign or change broker subscription plan.
-    
+
     Does NOT delete existing data.
     New features are enabled based on plan.
     Disabled features become unavailable (data preserved).
     """
-    
+
     # Verify admin
-    admin_user = await db.execute(
-        select(User).where(User.id == admin_id)
-    )
+    admin_user = await db.execute(select(User).where(User.id == admin_id))
     admin_user = admin_user.scalar_one_or_none()
-    
+
     if not admin_user or admin_user.role != Role.SUPER_ADMIN:
         raise ValueError("Only SUPER_ADMIN can assign plans")
-    
+
     # Get tenant
-    tenant = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
+    tenant = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = tenant.scalar_one_or_none()
-    
+
     if not tenant:
         raise ValueError("Tenant not found")
-    
-    # Would store plan in TenantSettings
-    # For now, just audit
-    
+
+    tenant.plan = plan.value
+
     audit_log = AuditLog(
         tenant_id=tenant_id,
         actor_id=admin_id,
         action="BROKER_PLAN_CHANGED",
-        metadata_json=str({
-            "plan": plan,
-        }),
+        metadata_json=str(
+            {
+                "plan": plan,
+            }
+        ),
     )
     db.add(audit_log)
-    
+
     await db.commit()
-    
+
     return tenant
 
 
