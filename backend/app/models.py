@@ -580,6 +580,27 @@ class TenantBranding(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="branding")
 
 
+class TenantThemeVersion(Base):
+    __tablename__ = "tenant_theme_versions"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column()
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_by: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class IntegrationProvider(StrEnum):
     MT4 = "MT4"
     MT5 = "MT5"
