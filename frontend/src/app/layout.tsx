@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "../styles/design-tokens.css";
 import { Providers } from "./providers";
 import ServiceWorkerRegistration from "@/components/pwa/ServiceWorkerRegistration";
 
@@ -13,7 +14,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
-      <body><Providers><ServiceWorkerRegistration />{children}</Providers></body>
+      <body>
+        <Providers>
+          <ServiceWorkerRegistration />
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }
