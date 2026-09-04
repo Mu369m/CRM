@@ -36,7 +36,7 @@ const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export default function InfrastructurePage() {
   const [message, setMessage] = useState("");
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-6xl">
         <header className="mb-8">
           <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">

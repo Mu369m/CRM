@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, TrendingUp, Users, Award, Percent } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
+  TrendingUp,
+  Users,
+  Award,
+  Percent,
+} from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
 interface IBPartner {
@@ -47,7 +56,9 @@ export default function IBPartnerPage() {
       });
 
       const response = await fetch(`/api/v1/broker/ib-partners?${query}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
 
       if (!response.ok) throw new Error("Failed to load");
@@ -66,7 +77,9 @@ export default function IBPartnerPage() {
     try {
       const response = await fetch(`/api/v1/broker/ib-partners/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
       if (!response.ok) throw new Error("Failed to delete");
       setPartners(partners.filter((p) => p.id !== id));
@@ -77,12 +90,18 @@ export default function IBPartnerPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-6xl">
         <header className="mb-7">
-          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">CRM Operations</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">IB Partner Management</h1>
-          <p className="mt-2 text-sm text-slate-500">Manage affiliate partners and track commissions and referrals.</p>
+          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">
+            CRM Operations
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">
+            IB Partner Management
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Manage affiliate partners and track commissions and referrals.
+          </p>
         </header>
 
         {message && (
@@ -132,13 +151,19 @@ export default function IBPartnerPage() {
             <tbody className="divide-y divide-slate-800/70">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     Loading...
                   </td>
                 </tr>
               ) : partners.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     No partners found.
                   </td>
                 </tr>
@@ -149,15 +174,21 @@ export default function IBPartnerPage() {
                       <div className="font-medium text-white">
                         {partner.first_name} {partner.last_name}
                       </div>
-                      <div className="text-[10px] text-slate-500">{partner.company_name}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {partner.company_name}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-300 text-[10px] font-mono">{partner.email}</td>
+                    <td className="px-6 py-4 text-slate-300 text-[10px] font-mono">
+                      {partner.email}
+                    </td>
                     <td className="px-6 py-4">
                       <span className="rounded bg-purple-400/10 px-2 py-1 text-[10px] text-purple-300">
                         Level {partner.ib_level}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right font-mono">{partner.total_referrals || 0}</td>
+                    <td className="px-6 py-4 text-right font-mono">
+                      {partner.total_referrals || 0}
+                    </td>
                     <td className="px-6 py-4 text-right font-mono text-emerald-300">
                       {partner.commission_earned || "$0.00"}
                     </td>
@@ -171,7 +202,10 @@ export default function IBPartnerPage() {
                       >
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => deletePartner(partner.id)} className="text-slate-400 hover:text-rose-300">
+                      <button
+                        onClick={() => deletePartner(partner.id)}
+                        className="text-slate-400 hover:text-rose-300"
+                      >
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -184,7 +218,8 @@ export default function IBPartnerPage() {
           {!loading && total > 0 && (
             <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3 text-[10px] text-slate-500">
               <div>
-                Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
+                Showing {offset + 1}-{Math.min(offset + limit, total)} of{" "}
+                {total}
               </div>
               <div className="flex gap-2">
                 <button
@@ -229,12 +264,22 @@ export default function IBPartnerPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Users;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">
+            {label}
+          </p>
           <strong className="mt-2 block text-2xl text-white">{value}</strong>
         </div>
         <Icon size={24} className="text-cyan-300/30" />
@@ -264,7 +309,9 @@ function IBFormModal({
   async function submit() {
     setSaving(true);
     try {
-      const url = partner ? `/api/v1/broker/ib-partners/${partner.id}` : "/api/v1/broker/ib-partners";
+      const url = partner
+        ? `/api/v1/broker/ib-partners/${partner.id}`
+        : "/api/v1/broker/ib-partners";
       const method = partner ? "PUT" : "POST";
 
       const response = await fetch(url, {
@@ -288,7 +335,9 @@ function IBFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-md rounded-lg border border-slate-700 bg-[#0D121F] p-6">
-        <h2 className="text-lg font-semibold text-white">{partner ? "Edit Partner" : "New IB Partner"}</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {partner ? "Edit Partner" : "New IB Partner"}
+        </h2>
 
         <div className="mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -296,14 +345,18 @@ function IBFormModal({
               type="text"
               placeholder="First name"
               value={formData.first_name}
-              onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, first_name: e.target.value })
+              }
               className="rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             />
             <input
               type="text"
               placeholder="Last name"
               value={formData.last_name}
-              onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, last_name: e.target.value })
+              }
               className="rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             />
           </div>
@@ -313,7 +366,9 @@ function IBFormModal({
             placeholder="Email"
             required
             value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, email: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
 
@@ -321,7 +376,9 @@ function IBFormModal({
             type="text"
             placeholder="Company Name"
             value={formData.company_name}
-            onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, company_name: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
 
@@ -329,7 +386,9 @@ function IBFormModal({
             <span className="text-xs text-slate-400">IB Level</span>
             <select
               value={formData.ib_level}
-              onChange={(e) => setFormData({ ...formData, ib_level: parseInt(e.target.value) })}
+              onChange={(e) =>
+                setFormData({ ...formData, ib_level: parseInt(e.target.value) })
+              }
               className="mt-1 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             >
               {[1, 2, 3, 4, 5].map((level) => (

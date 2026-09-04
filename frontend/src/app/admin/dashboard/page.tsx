@@ -46,7 +46,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <MainLayout>
+      <MainLayout panel="broker">
         <main className="mx-auto max-w-7xl py-10">
           <p className="text-[var(--text-secondary)]">Loading dashboard...</p>
         </main>
@@ -55,7 +55,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-7xl py-6">
         <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>

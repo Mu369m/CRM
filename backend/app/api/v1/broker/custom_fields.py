@@ -328,7 +328,7 @@ async def delete_field_definition(
     claims: dict = Depends(current_claims),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Delete a custom field definition."""
+    """Disable a custom field definition without deleting its values."""
     tenant_id = UUID(claims["tenant_id"])
 
     result = await db.execute(
@@ -342,7 +342,7 @@ async def delete_field_definition(
     if not field:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    await db.delete(field)
+    field.is_active = False
     await db.commit()
 
 
@@ -367,9 +367,16 @@ async def set_field_value(
             & (CustomFieldDefinition.tenant_id == tenant_id)
         )
     )
-    if not result.scalar():
+    field = result.scalar()
+    if not field:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Field not found"
+        )
+
+    if not field.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Field is disabled; enable it before setting new values",
         )
 
     # Check if value already exists

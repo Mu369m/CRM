@@ -51,7 +51,7 @@ export default function BrokerAdminPage() {
   const [message, setMessage] = useState("");
 
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-6xl">
         <header className="mb-8">
           <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">

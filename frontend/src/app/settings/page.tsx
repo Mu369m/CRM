@@ -83,10 +83,10 @@ export default function AdminSettingsPage() {
     setMessage("");
     const endpoint =
       activeTab === "branding"
-        ? "/api/settings"
+        ? "/api/v1/settings"
         : activeTab === "ib"
-          ? "/api/admin/rebate-rules"
-          : "/api/admin/manager-connections";
+          ? "/api/v1/admin/rebate-rules"
+          : "/api/v1/admin/manager-connections";
     const body =
       activeTab === "branding"
         ? settings

@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Edit2, Trash2, Archive, ChevronRight, TrendingUp, Users } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Filter,
+  Edit2,
+  Trash2,
+  Archive,
+  ChevronRight,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
 interface Lead {
@@ -35,7 +45,16 @@ export default function LeadManagementPage() {
   const [message, setMessage] = useState("");
 
   const limit = 20;
-  const stages = ["New Lead", "Contacted", "Interested", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
+  const stages = [
+    "New Lead",
+    "Contacted",
+    "Interested",
+    "Qualified",
+    "Proposal",
+    "Negotiation",
+    "Won",
+    "Lost",
+  ];
 
   useEffect(() => {
     loadLeads();
@@ -52,7 +71,9 @@ export default function LeadManagementPage() {
       });
 
       const response = await fetch(`/api/v1/broker/leads?${query}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
 
       if (!response.ok) throw new Error("Failed to load");
@@ -60,7 +81,9 @@ export default function LeadManagementPage() {
       setLeads(data.items);
       setTotal(data.total);
     } catch (e) {
-      setMessage((e instanceof Error ? e.message : "Error loading leads") + " ❌");
+      setMessage(
+        (e instanceof Error ? e.message : "Error loading leads") + " ❌",
+      );
     } finally {
       setLoading(false);
     }
@@ -71,7 +94,9 @@ export default function LeadManagementPage() {
     try {
       const response = await fetch(`/api/v1/broker/leads/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
       if (!response.ok) throw new Error("Failed to delete");
       setLeads(leads.filter((l) => l.id !== id));
@@ -82,12 +107,18 @@ export default function LeadManagementPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-6xl">
         <header className="mb-7">
-          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">CRM Operations</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Lead Management</h1>
-          <p className="mt-2 text-sm text-slate-500">Track and manage prospective clients through your pipeline.</p>
+          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">
+            CRM Operations
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">
+            Lead Management
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Track and manage prospective clients through your pipeline.
+          </p>
         </header>
 
         {message && (
@@ -155,13 +186,19 @@ export default function LeadManagementPage() {
             <tbody className="divide-y divide-slate-800/70">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     Loading...
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     No leads found.
                   </td>
                 </tr>
@@ -172,7 +209,9 @@ export default function LeadManagementPage() {
                       <div className="font-medium text-white">
                         {lead.first_name} {lead.last_name}
                       </div>
-                      <div className="text-[10px] text-slate-500">{lead.country}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {lead.country}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-slate-300">{lead.email}</td>
                     <td className="px-6 py-4">
@@ -180,8 +219,12 @@ export default function LeadManagementPage() {
                         {lead.stage_name}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-300">{lead.lead_score}</td>
-                    <td className="px-6 py-4 text-slate-500 text-[10px]">{lead.source}</td>
+                    <td className="px-6 py-4 text-slate-300">
+                      {lead.lead_score}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-[10px]">
+                      {lead.source}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => {
@@ -192,7 +235,10 @@ export default function LeadManagementPage() {
                       >
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => deleteLead(lead.id)} className="text-slate-400 hover:text-rose-300">
+                      <button
+                        onClick={() => deleteLead(lead.id)}
+                        className="text-slate-400 hover:text-rose-300"
+                      >
                         <Trash2 size={14} />
                       </button>
                     </td>
@@ -206,7 +252,8 @@ export default function LeadManagementPage() {
           {!loading && total > 0 && (
             <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3 text-[10px] text-slate-500">
               <div>
-                Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
+                Showing {offset + 1}-{Math.min(offset + limit, total)} of{" "}
+                {total}
               </div>
               <div className="flex gap-2">
                 <button
@@ -231,15 +278,23 @@ export default function LeadManagementPage() {
         {/* Stats */}
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Total Leads</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Total Leads
+            </p>
             <strong className="mt-2 block text-2xl text-white">{total}</strong>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Conversion Rate</p>
-            <strong className="mt-2 block text-2xl text-emerald-300">12.4%</strong>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Conversion Rate
+            </p>
+            <strong className="mt-2 block text-2xl text-emerald-300">
+              12.4%
+            </strong>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Avg Lead Score</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Avg Lead Score
+            </p>
             <strong className="mt-2 block text-2xl text-cyan-300">42</strong>
           </div>
         </div>
@@ -282,7 +337,9 @@ function LeadFormModal({
   async function submit() {
     setSaving(true);
     try {
-      const url = lead ? `/api/v1/broker/leads/${lead.id}` : "/api/v1/broker/leads";
+      const url = lead
+        ? `/api/v1/broker/leads/${lead.id}`
+        : "/api/v1/broker/leads";
       const method = lead ? "PUT" : "POST";
 
       const response = await fetch(url, {
@@ -306,7 +363,9 @@ function LeadFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-md rounded-lg border border-slate-700 bg-[#0D121F] p-6">
-        <h2 className="text-lg font-semibold text-white">{lead ? "Edit Lead" : "New Lead"}</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {lead ? "Edit Lead" : "New Lead"}
+        </h2>
 
         <div className="mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -314,14 +373,18 @@ function LeadFormModal({
               type="text"
               placeholder="First name"
               value={formData.first_name}
-              onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, first_name: e.target.value })
+              }
               className="rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             />
             <input
               type="text"
               placeholder="Last name"
               value={formData.last_name}
-              onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, last_name: e.target.value })
+              }
               className="rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             />
           </div>
@@ -330,7 +393,9 @@ function LeadFormModal({
             type="email"
             placeholder="Email"
             value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, email: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
 
@@ -338,7 +403,9 @@ function LeadFormModal({
             type="tel"
             placeholder="Phone"
             value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, phone: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
 
@@ -346,13 +413,17 @@ function LeadFormModal({
             type="text"
             placeholder="Country"
             value={formData.country}
-            onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, country: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
 
           <select
             value={formData.source}
-            onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, source: e.target.value })
+            }
             className="w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           >
             <option value="">Select source...</option>

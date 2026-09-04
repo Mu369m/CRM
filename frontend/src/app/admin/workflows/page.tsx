@@ -50,10 +50,17 @@ export default function WorkflowsPage() {
     trigger_type: "entity_created",
   });
 
+  const authHeaders = (): HeadersInit => {
+    const token = window.localStorage.getItem("access_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/v1/broker/workflows");
+      const response = await fetch("/api/v1/broker/workflows", {
+        headers: authHeaders(),
+      });
       if (!response.ok) throw new Error("Failed to fetch workflows");
       const data = await response.json();
       setWorkflows(data);
@@ -86,7 +93,7 @@ export default function WorkflowsPage() {
 
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(formData),
       });
 
@@ -126,6 +133,7 @@ export default function WorkflowsPage() {
     try {
       const response = await fetch(`/api/v1/broker/workflows/${id}`, {
         method: "DELETE",
+        headers: authHeaders(),
       });
       if (!response.ok) throw new Error("Failed to delete workflow");
       setError("");
@@ -306,12 +314,12 @@ export default function WorkflowsPage() {
                   {workflow.is_active ? (
                     <CheckCircle
                       size={20}
-                      className="text-green-500 flex-shrink-0"
+                      className="text-green-500 shrink-0"
                     />
                   ) : (
                     <AlertCircle
                       size={20}
-                      className="text-yellow-500 flex-shrink-0"
+                      className="text-yellow-500 shrink-0"
                     />
                   )}
                 </div>

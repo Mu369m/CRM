@@ -6,30 +6,66 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
+  Database,
+  FileCheck2,
   Home,
+  Handshake,
   Menu,
+  Settings2,
+  SlidersHorizontal,
+  Users,
+  UserPlus,
   UserRound,
   WalletCards,
+  Workflow,
   X,
-  Settings,
-  HelpCircle,
 } from "lucide-react";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
-const primaryNav = [
+const traderPrimaryNav = [
   { label: "Overview", href: "/", icon: Home },
   { label: "Trading", href: "/trader-cabinet", icon: BarChart3 },
   { label: "Wallet", href: "/trader-cabinet#wallet", icon: WalletCards },
   { label: "Approvals", href: "/trader-cabinet#approvals", icon: Bell },
 ];
 
-const secondaryNav = [
+const traderSecondaryNav = [
   { label: "Profile", href: "/trader/profile", icon: UserRound },
   { label: "IB Partner", href: "/trader/ib", icon: BarChart3 },
 ];
 
-export default function MainLayout({ children }: { children: ReactNode }) {
+const brokerPrimaryNav = [
+  { label: "Dashboard", href: "/admin/dashboard", icon: Home },
+  { label: "Leads", href: "/admin/leads", icon: UserPlus },
+  { label: "Clients", href: "/admin/clients", icon: Users },
+  { label: "Finance", href: "/admin/finance", icon: WalletCards },
+  { label: "KYC & Compliance", href: "/admin/kyc-documents", icon: FileCheck2 },
+  { label: "IB Partners", href: "/admin/ib-partners", icon: Handshake },
+  { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+  { label: "Risk & Trading", href: "/admin/risk", icon: SlidersHorizontal },
+];
+
+const brokerSecondaryNav = [
+  { label: "Infrastructure", href: "/admin/infrastructure", icon: Database },
+  { label: "Broker Settings", href: "/admin/broker-settings", icon: Settings2 },
+];
+
+type Panel = "trader" | "broker";
+
+export default function MainLayout({
+  children,
+  panel = "trader",
+}: {
+  children: ReactNode;
+  panel?: Panel;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const primaryNav = panel === "broker" ? brokerPrimaryNav : traderPrimaryNav;
+  const secondaryNav =
+    panel === "broker" ? brokerSecondaryNav : traderSecondaryNav;
+  const title = panel === "broker" ? "Broker Admin" : "Trader Room";
+  const workspace =
+    panel === "broker" ? "Broker Operations" : "Northstar Markets";
 
   return (
     <div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
@@ -47,7 +83,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
                   Northstar
                 </div>
                 <div className="text-xs text-[var(--text-tertiary)]">
-                  Broker CRM
+                  {title}
                 </div>
               </div>
             </Link>
@@ -61,7 +97,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             <button className="mt-3 flex w-full items-center justify-between text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--color-brand)]">
               <span className="flex items-center gap-2">
                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                Northstar Markets
+                {workspace}
               </span>
               <ChevronDown size={14} className="text-[var(--text-tertiary)]" />
             </button>
@@ -94,7 +130,9 @@ export default function MainLayout({ children }: { children: ReactNode }) {
                 Status
               </p>
               <p className="mt-2 text-lg font-bold text-emerald-600">99.99%</p>
-              <p className="text-xs text-[var(--text-tertiary)]">Uptime · Live</p>
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Uptime · Live
+              </p>
             </div>
           </div>
         </div>
@@ -125,10 +163,10 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           {/* DESKTOP TITLE */}
           <div className="hidden lg:block">
             <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
-              Forex Broker Administration
+              {panel === "broker" ? "Broker operations" : "Trader workspace"}
             </p>
             <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-              Overview
+              {title}
             </h1>
           </div>
 
@@ -155,9 +193,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
 
         {/* PAGE CONTENT */}
         <main className="flex-1 overflow-auto">
-          <div className="p-6 sm:p-8 lg:p-10">
-            {children}
-          </div>
+          <div className="p-6 sm:p-8 lg:p-10">{children}</div>
         </main>
       </div>
 
@@ -173,7 +209,9 @@ export default function MainLayout({ children }: { children: ReactNode }) {
                 <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-600">
                   <span className="text-lg font-bold text-white">N</span>
                 </div>
-                <span className="font-bold text-[var(--text-primary)]">Northstar</span>
+                <span className="font-bold text-[var(--text-primary)]">
+                  Northstar
+                </span>
               </Link>
               <button
                 className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"

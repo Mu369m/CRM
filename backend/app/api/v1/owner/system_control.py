@@ -57,14 +57,19 @@ def _response(broadcast: SystemBroadcast) -> BroadcastResponse:
     )
 
 
-@router.post("/api/v1/owner/broadcast", response_model=BroadcastResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/api/v1/owner/broadcast",
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_broadcast(
     payload: BroadcastCreateRequest,
     db: AsyncSession = Depends(get_master_db),
     _: dict[str, str] = Depends(get_current_owner_user),
 ) -> BroadcastResponse:
     """Replace the current global banner with a new owner-approved configuration."""
-    current = await db.scalar(select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True)))
+    current = await db.scalar(
+        select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True))
+    )
     if current:
         current.enabled = False
     broadcast = SystemBroadcast(
@@ -79,7 +84,7 @@ async def create_broadcast(
     return _response(broadcast)
 
 
-@router.get("/api/v1/owner/broadcast", response_model=BroadcastResponse | None)
+@router.get("/api/v1/owner/broadcast")
 async def get_owner_broadcast(
     response: Response,
     db: AsyncSession = Depends(get_master_db),
@@ -87,13 +92,29 @@ async def get_owner_broadcast(
 ) -> BroadcastResponse | None:
     """Return the active global banner for the authenticated master owner."""
     response.headers["Cache-Control"] = "private, max-age=5, stale-while-revalidate=15"
-    broadcast = await db.scalar(select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True), SystemBroadcast.target_brokers == BroadcastTarget.ALL_BROKERS.value).order_by(SystemBroadcast.updated_at.desc()))
+    broadcast = await db.scalar(
+        select(SystemBroadcast)
+        .where(
+            SystemBroadcast.enabled.is_(True),
+            SystemBroadcast.target_brokers == BroadcastTarget.ALL_BROKERS.value,
+        )
+        .order_by(SystemBroadcast.updated_at.desc())
+    )
     return _response(broadcast) if broadcast else None
 
 
-@router.get("/api/v1/tenant/broadcast", response_model=BroadcastResponse | None)
-async def get_tenant_broadcast(response: Response, db: AsyncSession = Depends(get_master_db)) -> BroadcastResponse | None:
-    """Return the active banner for broker dashboards with a short public cache."""
+@router.get("/api/v1/tenant/broadcast")
+async def get_tenant_broadcast(
+    response: Response, db: AsyncSession = Depends(get_master_db)
+) -> BroadcastResponse | None:
+    """Return only universally-targeted banners until tenant plan mapping is authoritative."""
     response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
-    broadcast = await db.scalar(select(SystemBroadcast).where(SystemBroadcast.enabled.is_(True)).order_by(SystemBroadcast.updated_at.desc()))
+    broadcast = await db.scalar(
+        select(SystemBroadcast)
+        .where(
+            SystemBroadcast.enabled.is_(True),
+            SystemBroadcast.target_brokers == BroadcastTarget.ALL_BROKERS.value,
+        )
+        .order_by(SystemBroadcast.updated_at.desc())
+    )
     return _response(broadcast) if broadcast else None

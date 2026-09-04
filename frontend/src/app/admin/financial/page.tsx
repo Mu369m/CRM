@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Check, X, Clock, TrendingUp, ArrowDownRight, ArrowUpRight } from "lucide-react";
+import {
+  Search,
+  Check,
+  X,
+  Clock,
+  TrendingUp,
+  ArrowDownRight,
+  ArrowUpRight,
+} from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
 interface Transaction {
@@ -47,7 +55,9 @@ export default function FinancialOperationsPage() {
       });
 
       const response = await fetch(`/api/v1/broker/transactions?${query}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
       });
 
       if (!response.ok) throw new Error("Failed to load");
@@ -80,7 +90,8 @@ export default function FinancialOperationsPage() {
     }
   }
 
-  const money = (val: string) => `$${parseFloat(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (val: string) =>
+    `$${parseFloat(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -98,12 +109,18 @@ export default function FinancialOperationsPage() {
   };
 
   return (
-    <MainLayout>
+    <MainLayout panel="broker">
       <main className="mx-auto max-w-6xl">
         <header className="mb-7">
-          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">Financial Operations</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Deposits & Withdrawals</h1>
-          <p className="mt-2 text-sm text-slate-500">Review and approve client financial transactions.</p>
+          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">
+            Financial Operations
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">
+            Deposits & Withdrawals
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Review and approve client financial transactions.
+          </p>
         </header>
 
         {message && (
@@ -158,13 +175,19 @@ export default function FinancialOperationsPage() {
             <tbody className="divide-y divide-slate-800/70">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={7}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     Loading...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                  <td
+                    colSpan={7}
+                    className="px-6 py-8 text-center text-slate-500"
+                  >
                     No transactions found.
                   </td>
                 </tr>
@@ -172,20 +195,33 @@ export default function FinancialOperationsPage() {
                 transactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-800/30">
                     <td className="px-6 py-4">
-                      <div className="font-medium text-white">{tx.client_name}</div>
-                      <div className="text-[10px] font-mono text-slate-500">{tx.client_id.slice(0, 8)}</div>
+                      <div className="font-medium text-white">
+                        {tx.client_name}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500">
+                        {tx.client_id.slice(0, 8)}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {tx.type === "DEPOSIT" ? (
-                        <ArrowDownRight size={16} className="text-emerald-300" />
+                        <ArrowDownRight
+                          size={16}
+                          className="text-emerald-300"
+                        />
                       ) : (
                         <ArrowUpRight size={16} className="text-rose-300" />
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right font-mono font-semibold">{money(tx.amount)}</td>
-                    <td className="px-6 py-4 text-[10px] text-slate-400">{tx.method}</td>
+                    <td className="px-6 py-4 text-right font-mono font-semibold">
+                      {money(tx.amount)}
+                    </td>
+                    <td className="px-6 py-4 text-[10px] text-slate-400">
+                      {tx.method}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={`rounded px-2 py-1 text-[10px] font-medium ${statusColor(tx.status)}`}>
+                      <span
+                        className={`rounded px-2 py-1 text-[10px] font-medium ${statusColor(tx.status)}`}
+                      >
                         {tx.status}
                       </span>
                     </td>
@@ -221,7 +257,8 @@ export default function FinancialOperationsPage() {
           {!loading && total > 0 && (
             <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3 text-[10px] text-slate-500">
               <div>
-                Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
+                Showing {offset + 1}-{Math.min(offset + limit, total)} of{" "}
+                {total}
               </div>
               <div className="flex gap-2">
                 <button
@@ -246,20 +283,32 @@ export default function FinancialOperationsPage() {
         {/* Summary Stats */}
         <div className="mt-6 grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Pending Review</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Pending Review
+            </p>
             <strong className="mt-2 block text-2xl text-amber-300">12</strong>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Total Deposits (24h)</p>
-            <strong className="mt-2 block text-2xl text-emerald-300">$1.24M</strong>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Total Deposits (24h)
+            </p>
+            <strong className="mt-2 block text-2xl text-emerald-300">
+              $1.24M
+            </strong>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Total Withdrawals (24h)</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Total Withdrawals (24h)
+            </p>
             <strong className="mt-2 block text-2xl text-rose-300">$340K</strong>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">Net Flow</p>
-            <strong className="mt-2 block text-2xl text-cyan-300">+$900K</strong>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Net Flow
+            </p>
+            <strong className="mt-2 block text-2xl text-cyan-300">
+              +$900K
+            </strong>
           </div>
         </div>
       </main>
