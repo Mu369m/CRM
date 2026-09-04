@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.db_router import get_tenant_db
@@ -23,11 +24,16 @@ from ....core.integration_architecture import (
     integration_scope_ok,
     mask_secret,
 )
+from ....core.provider_connectors import test_provider_connection
 from ....crypto import decrypt_field, encrypt_field
 from ....middleware.audit_logger import AuditLogger
 from ....models import IntegrationConfig, IntegrationEntitlement, Role
 from ....security import require_roles
-from ....admin_schemas import IntegrationConfigCreate, IntegrationConfigResponse
+from ....admin_schemas import (
+    IntegrationConfigCreate,
+    IntegrationConfigResponse,
+    IntegrationCredentialsUpdate,
+)
 
 router = APIRouter(prefix="/api/v1/broker/integrations", tags=["Broker Integrations"])
 
@@ -116,7 +122,7 @@ async def create_integration(
         enabled=payload.enabled,
         status=IntegrationStatus.NOT_CONFIGURED,
         config_json=payload.config_json or {},
-        encrypted_credentials=encrypt_field(str(payload.credentials or {}))
+        encrypted_credentials=encrypt_field(json.dumps(payload.credentials or {}))
         if payload.credentials
         else None,
     )
@@ -196,6 +202,61 @@ async def get_integration(
     )
 
 
+@router.put(
+    "/{integration_id:uuid}/credentials", response_model=IntegrationConfigResponse
+)
+async def replace_integration_credentials(
+    integration_id: UUID,
+    payload: IntegrationCredentialsUpdate,
+    claims: dict[str, str] = Depends(
+        require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN)
+    ),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Validate new credentials before replacing the current configuration."""
+    tenant_id, actor_id = UUID(claims["tenant_id"]), UUID(claims["sub"])
+    integration = await db.scalar(
+        select(IntegrationConfig)
+        .where(
+            IntegrationConfig.id == integration_id,
+            IntegrationConfig.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if not integration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+        )
+    candidate = encrypt_field(json.dumps(payload.credentials))
+    result = await test_provider_connection(
+        integration.provider.value,
+        integration.integration_type,
+        payload.config_json,
+        candidate,
+        decrypt_field,
+    )
+    if result.status != IntegrationStatus.CONNECTED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result.message
+        )
+    integration.encrypted_credentials = candidate
+    integration.config_json = payload.config_json
+    integration.status = IntegrationStatus.CONNECTED
+    integration.last_error = None
+    integration.last_connected_at = func.now()
+    await AuditLogger.log_update(
+        db,
+        tenant_id,
+        actor_id,
+        "INTEGRATION",
+        integration.id,
+        {"action": "CREDENTIALS_UPDATED", "status": result.status.value},
+    )
+    await db.commit()
+    await db.refresh(integration)
+    return await get_integration(integration_id, claims, db)
+
+
 @router.post("/{integration_id:uuid}/test-connection")
 async def test_integration_connection(
     integration_id: UUID,
@@ -228,14 +289,20 @@ async def test_integration_connection(
             "message": "Credentials are required before testing",
         }
 
+    result = await test_provider_connection(
+        integration.provider.value,
+        integration.integration_type,
+        integration.config_json or {},
+        integration.encrypted_credentials,
+        decrypt_field,
+    )
+    integration.status = result.status
+    integration.last_error = (
+        None if result.status == IntegrationStatus.CONNECTED else result.message
+    )
+    if result.status == IntegrationStatus.CONNECTED:
+        integration.last_connected_at = func.now()
     try:
-        decrypted = decrypt_field(integration.encrypted_credentials)
-        if not decrypted or decrypted == "{}":
-            raise ValueError("Credentials missing")
-        integration.status = IntegrationStatus.ERROR
-        integration.last_error = (
-            "Provider health check is not configured for this integration"
-        )
         await AuditLogger.log_update(
             db,
             tenant_id,
@@ -246,8 +313,8 @@ async def test_integration_connection(
         )
         await db.commit()
         return {
-            "status": IntegrationStatus.ERROR.value,
-            "message": "Provider health check is not configured",
+            "status": result.status.value,
+            "message": result.message,
         }
     except Exception:  # pragma: no cover - safe fallback for provider validation layer
         integration.status = IntegrationStatus.CONNECTION_FAILED

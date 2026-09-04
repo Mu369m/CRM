@@ -63,6 +63,12 @@ class IntegrationConfigCreate(BaseModel):
     credentials: dict | None = None
 
 
+class IntegrationCredentialsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    config_json: dict = Field(default_factory=dict)
+    credentials: dict = Field(min_length=1)
+
+
 class IntegrationConfigResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
