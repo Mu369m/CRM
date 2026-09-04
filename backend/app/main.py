@@ -25,9 +25,6 @@ from .api.v1.broker.deposits import router as deposits_router
 from .api.v1.broker.withdrawals import router as withdrawals_router
 from .api.v1.broker.documents import router as documents_router
 from .api.v1.broker.audit import router as audit_router
-from .api.v1.broker.ib_partners import router as ib_partners_router
-from .api.v1.broker.transactions import router as transactions_router
-from .api.v1.broker.kyc_documents import router as kyc_documents_router
 from .api.v1.broker.workflows import router as workflows_router
 from .api.v1.trader.accounts import router as trader_accounts_router
 from .api.v1.trader.dashboard import router as trader_dashboard_router
@@ -53,7 +50,13 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Tenant-Host", "X-Tenant-ID"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Tenant-Host",
+        "X-Tenant-ID",
+    ],
 )
 app.include_router(api_router)
 app.include_router(webhook_router)
@@ -74,9 +77,6 @@ app.include_router(deposits_router)
 app.include_router(withdrawals_router)
 app.include_router(documents_router)
 app.include_router(audit_router)
-app.include_router(ib_partners_router)
-app.include_router(transactions_router)
-app.include_router(kyc_documents_router)
 app.include_router(workflows_router)
 app.include_router(trader_accounts_router)
 app.include_router(trader_dashboard_router)

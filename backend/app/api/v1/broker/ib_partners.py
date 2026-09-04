@@ -8,11 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_
 
 from app.db import get_db
-from app.models.master import IBPartner
+from app.models import IBPartner
 from app.middleware.rbac_enforcer import require_permission
 from app.middleware.audit_logger import AuditLogger
 from app.security import get_current_user
-from app.schemas import IBPartnerCreate, IBPartnerUpdate, IBPartnerResponse, PaginatedResponse
+from app.schemas import (
+    IBPartnerCreate,
+    IBPartnerUpdate,
+    IBPartnerResponse,
+    PaginatedResponse,
+)
 
 router = APIRouter(prefix="/api/v1/broker/ib-partners", tags=["IB Partners"])
 
@@ -94,7 +99,10 @@ async def get_ib_partner(
     """Get single IB partner"""
     result = await db.execute(
         select(IBPartner).where(
-            and_(IBPartner.id == partner_id, IBPartner.broker_id == current_user.broker_id)
+            and_(
+                IBPartner.id == partner_id,
+                IBPartner.broker_id == current_user.broker_id,
+            )
         )
     )
     partner = result.scalar_one_or_none()
@@ -116,7 +124,10 @@ async def update_ib_partner(
     """Update IB partner"""
     result = await db.execute(
         select(IBPartner).where(
-            and_(IBPartner.id == partner_id, IBPartner.broker_id == current_user.broker_id)
+            and_(
+                IBPartner.id == partner_id,
+                IBPartner.broker_id == current_user.broker_id,
+            )
         )
     )
     partner = result.scalar_one_or_none()
@@ -157,7 +168,10 @@ async def delete_ib_partner(
     """Delete IB partner"""
     result = await db.execute(
         select(IBPartner).where(
-            and_(IBPartner.id == partner_id, IBPartner.broker_id == current_user.broker_id)
+            and_(
+                IBPartner.id == partner_id,
+                IBPartner.broker_id == current_user.broker_id,
+            )
         )
     )
     partner = result.scalar_one_or_none()

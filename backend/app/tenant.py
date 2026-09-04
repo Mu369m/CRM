@@ -3,13 +3,16 @@
 import re
 from uuid import UUID
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import TenantSettings
+from .security import current_claims
 
-_SCHEMA_RE = re.compile(r"^tenant_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$")
+_SCHEMA_RE = re.compile(
+    r"^tenant_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$"
+)
 
 
 def tenant_from_host(host: str) -> UUID | None:
@@ -21,7 +24,19 @@ def tenant_from_host(host: str) -> UUID | None:
         return None
 
 
-async def resolve_tenant_settings(host: str = Header(default=""), db: AsyncSession | None = None) -> TenantSettings:
+async def get_tenant_id(claims: dict[str, str] = Depends(current_claims)) -> UUID:
+    """Resolve the tenant only from the authenticated token claims."""
+    try:
+        return UUID(claims["tenant_id"])
+    except (KeyError, ValueError) as error:
+        raise HTTPException(
+            status_code=400, detail="Invalid tenant identity"
+        ) from error
+
+
+async def resolve_tenant_settings(
+    host: str = Header(default=""), db: AsyncSession | None = None
+) -> TenantSettings:
     """Load tenant settings by UUID host; production routing should also validate CNAME ownership."""
     tenant_id = tenant_from_host(host)
     if not tenant_id or db is None:

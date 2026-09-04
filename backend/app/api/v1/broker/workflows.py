@@ -19,7 +19,6 @@ from app.models import (
     WorkflowExecution,
     WorkflowActionExecution,
 )
-from app.schemas import BaseTenantModel
 from app.tenant import get_tenant_id
 from pydantic import BaseModel, Field
 
@@ -30,13 +29,20 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 class WorkflowActionCreateSchema(BaseModel):
     """Schema for creating workflow actions."""
-    action_type: str = Field(..., description="Type of action: send_notification, assign_lead, create_task, etc.")
-    action_config: dict = Field(default_factory=dict, description="Configuration for the action")
+
+    action_type: str = Field(
+        ...,
+        description="Type of action: send_notification, assign_lead, create_task, etc.",
+    )
+    action_config: dict = Field(
+        default_factory=dict, description="Configuration for the action"
+    )
     order: int = Field(default=0, description="Execution order")
 
 
 class WorkflowActionResponseSchema(BaseModel):
     """Schema for workflow action responses."""
+
     id: UUID
     workflow_id: UUID
     action_type: str
@@ -52,14 +58,18 @@ class WorkflowActionResponseSchema(BaseModel):
 
 class WorkflowConditionCreateSchema(BaseModel):
     """Schema for creating workflow conditions."""
+
     field_name: str = Field(..., description="Field to evaluate")
-    operator: str = Field(..., description="Comparison operator: equals, contains, greater_than, etc.")
+    operator: str = Field(
+        ..., description="Comparison operator: equals, contains, greater_than, etc."
+    )
     value: Optional[str] = Field(None, description="Value to compare against")
     logic_operator: str = Field(default="AND", description="Logic operator: AND or OR")
 
 
 class WorkflowConditionResponseSchema(BaseModel):
     """Schema for workflow condition responses."""
+
     id: UUID
     workflow_id: UUID
     field_name: str
@@ -73,19 +83,31 @@ class WorkflowConditionResponseSchema(BaseModel):
         from_attributes = True
 
 
-class WorkflowCreateSchema(BaseTenantModel):
+class WorkflowCreateSchema(BaseModel):
     """Schema for creating workflows."""
+
     name: str = Field(..., min_length=1, max_length=200, description="Workflow name")
     description: Optional[str] = Field(None, description="Workflow description")
-    entity_type: str = Field(..., description="Entity type: lead, client, deposit, etc.")
-    trigger_type: str = Field(..., description="Trigger type: entity_created, status_changed, time_based")
-    trigger_config: dict = Field(default_factory=dict, description="Trigger configuration")
-    actions: Optional[list[WorkflowActionCreateSchema]] = Field(None, description="Initial actions")
-    conditions: Optional[list[WorkflowConditionCreateSchema]] = Field(None, description="Initial conditions")
+    entity_type: str = Field(
+        ..., description="Entity type: lead, client, deposit, etc."
+    )
+    trigger_type: str = Field(
+        ..., description="Trigger type: entity_created, status_changed, time_based"
+    )
+    trigger_config: dict = Field(
+        default_factory=dict, description="Trigger configuration"
+    )
+    actions: Optional[list[WorkflowActionCreateSchema]] = Field(
+        None, description="Initial actions"
+    )
+    conditions: Optional[list[WorkflowConditionCreateSchema]] = Field(
+        None, description="Initial conditions"
+    )
 
 
 class WorkflowUpdateSchema(BaseModel):
     """Schema for updating workflows."""
+
     name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = None
     trigger_type: Optional[str] = None
@@ -95,6 +117,7 @@ class WorkflowUpdateSchema(BaseModel):
 
 class WorkflowResponseSchema(BaseModel):
     """Schema for workflow responses."""
+
     id: UUID
     tenant_id: UUID
     name: str
@@ -115,6 +138,7 @@ class WorkflowResponseSchema(BaseModel):
 
 class WorkflowExecutionResponseSchema(BaseModel):
     """Schema for workflow execution responses."""
+
     id: UUID
     workflow_id: UUID
     entity_id: UUID
@@ -191,7 +215,9 @@ async def create_workflow(
 
         await db.commit()
         await db.refresh(workflow)
-        await AuditLogger.log_create(db, tenant_id, "Workflow", workflow.id, {"name": workflow.name})
+        await AuditLogger.log_create(
+            db, tenant_id, "Workflow", workflow.id, {"name": workflow.name}
+        )
         return WorkflowResponseSchema.model_validate(workflow)
     except HTTPException:
         raise
@@ -234,7 +260,9 @@ async def get_workflow(
 ) -> WorkflowResponseSchema:
     """Get workflow details."""
     workflow = await db.execute(
-        select(Workflow).where(and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+        select(Workflow).where(
+            and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id)
+        )
     )
     wf = workflow.scalar_one_or_none()
     if not wf:
@@ -252,7 +280,9 @@ async def update_workflow(
 ) -> WorkflowResponseSchema:
     """Update a workflow."""
     workflow = await db.execute(
-        select(Workflow).where(and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+        select(Workflow).where(
+            and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id)
+        )
     )
     wf = workflow.scalar_one_or_none()
     if not wf:
@@ -277,7 +307,9 @@ async def delete_workflow(
 ):
     """Delete a workflow."""
     workflow = await db.execute(
-        select(Workflow).where(and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+        select(Workflow).where(
+            and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id)
+        )
     )
     wf = workflow.scalar_one_or_none()
     if not wf:
@@ -291,7 +323,11 @@ async def delete_workflow(
 # ========== WORKFLOW ACTIONS ENDPOINTS ==========
 
 
-@router.post("/{workflow_id}/actions", response_model=WorkflowActionResponseSchema, status_code=201)
+@router.post(
+    "/{workflow_id}/actions",
+    response_model=WorkflowActionResponseSchema,
+    status_code=201,
+)
 async def create_workflow_action(
     workflow_id: UUID,
     payload: WorkflowActionCreateSchema,
@@ -302,7 +338,9 @@ async def create_workflow_action(
     """Add an action to a workflow."""
     # Verify workflow exists
     workflow = await db.execute(
-        select(Workflow).where(and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+        select(Workflow).where(
+            and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id)
+        )
     )
     if not workflow.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -319,7 +357,9 @@ async def create_workflow_action(
     return WorkflowActionResponseSchema.model_validate(action)
 
 
-@router.put("/{workflow_id}/actions/{action_id}", response_model=WorkflowActionResponseSchema)
+@router.put(
+    "/{workflow_id}/actions/{action_id}", response_model=WorkflowActionResponseSchema
+)
 async def update_workflow_action(
     workflow_id: UUID,
     action_id: UUID,
@@ -329,7 +369,11 @@ async def update_workflow_action(
     _=Depends(require_permission("workflows.edit")),
 ) -> WorkflowActionResponseSchema:
     """Update a workflow action."""
-    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.id == workflow_id, Workflow.tenant_id == tenant_id
+        )
+    )
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -363,7 +407,11 @@ async def delete_workflow_action(
     _=Depends(require_permission("workflows.edit")),
 ):
     """Delete a workflow action."""
-    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.id == workflow_id, Workflow.tenant_id == tenant_id
+        )
+    )
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -386,7 +434,11 @@ async def delete_workflow_action(
 # ========== WORKFLOW CONDITIONS ENDPOINTS ==========
 
 
-@router.post("/{workflow_id}/conditions", response_model=WorkflowConditionResponseSchema, status_code=201)
+@router.post(
+    "/{workflow_id}/conditions",
+    response_model=WorkflowConditionResponseSchema,
+    status_code=201,
+)
 async def create_workflow_condition(
     workflow_id: UUID,
     payload: WorkflowConditionCreateSchema,
@@ -397,7 +449,9 @@ async def create_workflow_condition(
     """Add a condition to a workflow."""
     # Verify workflow exists
     workflow = await db.execute(
-        select(Workflow).where(and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+        select(Workflow).where(
+            and_(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id)
+        )
     )
     if not workflow.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -424,7 +478,11 @@ async def delete_workflow_condition(
     _=Depends(require_permission("workflows.edit")),
 ):
     """Delete a workflow condition."""
-    workflow = await db.scalar(select(Workflow).where(Workflow.id == workflow_id, Workflow.tenant_id == tenant_id))
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.id == workflow_id, Workflow.tenant_id == tenant_id
+        )
+    )
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -447,7 +505,9 @@ async def delete_workflow_condition(
 # ========== WORKFLOW EXECUTIONS ENDPOINTS ==========
 
 
-@router.get("/{workflow_id}/executions", response_model=list[WorkflowExecutionResponseSchema])
+@router.get(
+    "/{workflow_id}/executions", response_model=list[WorkflowExecutionResponseSchema]
+)
 async def list_workflow_executions(
     workflow_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -459,20 +519,28 @@ async def list_workflow_executions(
 ) -> list[WorkflowExecutionResponseSchema]:
     """List workflow executions."""
     query = select(WorkflowExecution).where(
-        and_(WorkflowExecution.workflow_id == workflow_id, WorkflowExecution.tenant_id == tenant_id)
+        and_(
+            WorkflowExecution.workflow_id == workflow_id,
+            WorkflowExecution.tenant_id == tenant_id,
+        )
     )
 
     if status:
         query = query.where(WorkflowExecution.status == status)
 
-    query = query.order_by(desc(WorkflowExecution.started_at)).limit(limit).offset(offset)
+    query = (
+        query.order_by(desc(WorkflowExecution.started_at)).limit(limit).offset(offset)
+    )
     result = await db.execute(query)
     executions = result.scalars().all()
 
     return [WorkflowExecutionResponseSchema.model_validate(e) for e in executions]
 
 
-@router.get("/{workflow_id}/executions/{execution_id}", response_model=WorkflowExecutionResponseSchema)
+@router.get(
+    "/{workflow_id}/executions/{execution_id}",
+    response_model=WorkflowExecutionResponseSchema,
+)
 async def get_workflow_execution(
     workflow_id: UUID,
     execution_id: UUID,

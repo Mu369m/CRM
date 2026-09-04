@@ -99,7 +99,7 @@ class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
     assigned_to_id: UUID
-    priority: str = Field(default="NORMAL", regex="^(LOW|NORMAL|HIGH|URGENT)$")
+    priority: str = Field(default="NORMAL", pattern="^(LOW|NORMAL|HIGH|URGENT)$")
     due_date: datetime | None = None
 
 
@@ -156,24 +156,23 @@ async def create_lead(
     """Create a new lead. Requires: leads.create"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "leads", "create", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "leads", "create", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     # Verify pipeline and stage exist and belong to tenant
     result = await db.execute(
         select(Pipeline).where(
-            (Pipeline.id == payload.pipeline_id)
-            & (Pipeline.tenant_id == tenant_id)
+            (Pipeline.id == payload.pipeline_id) & (Pipeline.tenant_id == tenant_id)
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline not found"
+        )
+
     result = await db.execute(
         select(PipelineStage).where(
             (PipelineStage.id == payload.stage_id)
@@ -181,8 +180,10 @@ async def create_lead(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found"
+        )
+
     lead = Lead(
         tenant_id=tenant_id,
         email=payload.email,
@@ -199,7 +200,7 @@ async def create_lead(
     db.add(lead)
     await db.commit()
     await db.refresh(lead)
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -211,7 +212,7 @@ async def create_lead(
     )
     db.add(activity)
     await db.commit()
-    
+
     return lead
 
 
@@ -229,19 +230,18 @@ async def list_leads(
 ):
     """List leads with filtering. Requires: leads.view"""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "leads", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     query = select(Lead).where(
-        (Lead.tenant_id == tenant_id)
-        & (Lead.is_archived == is_archived)
+        (Lead.tenant_id == tenant_id) & (Lead.is_archived == is_archived)
     )
-    
+
     if search:
         search_term = f"%{search}%"
         query = query.where(
@@ -250,27 +250,27 @@ async def list_leads(
             | (Lead.last_name.ilike(search_term))
             | (Lead.phone.ilike(search_term))
         )
-    
+
     if source:
         query = query.where(Lead.source == source)
-    
+
     if stage_id:
         query = query.where(Lead.stage_id == stage_id)
-    
+
     if assigned_to_id:
         query = query.where(Lead.assigned_to_id == assigned_to_id)
-    
+
     # Count total
     count_result = await db.execute(select(Lead).select_entity_from(query))
     total = len(count_result.scalars().all())
-    
+
     # Paginate
     offset = (page - 1) * limit
     query = query.order_by(desc(Lead.created_at)).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     leads = result.scalars().all()
-    
+
     return {
         "total": total,
         "page": page,
@@ -287,25 +287,22 @@ async def get_lead(
 ):
     """Get a specific lead. Requires: leads.view"""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Check permission
     has_permission = await check_permission(
         UUID(claims["sub"]), "leads", "view", db, tenant_id
     )
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Lead).where(
-            (Lead.id == lead_id)
-            & (Lead.tenant_id == tenant_id)
-        )
+        select(Lead).where((Lead.id == lead_id) & (Lead.tenant_id == tenant_id))
     )
     lead = result.scalar()
-    
+
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     return lead
 
 
@@ -319,39 +316,34 @@ async def update_lead(
     """Update a lead. Requires: leads.edit"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "leads", "edit", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "leads", "edit", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Lead).where(
-            (Lead.id == lead_id)
-            & (Lead.tenant_id == tenant_id)
-        )
+        select(Lead).where((Lead.id == lead_id) & (Lead.tenant_id == tenant_id))
     )
     lead = result.scalar()
-    
+
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Track changes for activity log
     changes = []
-    
+
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         old_value = getattr(lead, key)
         if old_value != value:
             changes.append(f"{key}: {old_value} -> {value}")
         setattr(lead, key, value)
-    
+
     lead.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(lead)
-    
+
     # Log activity if there were changes
     if changes:
         activity = Activity(
@@ -364,7 +356,7 @@ async def update_lead(
         )
         db.add(activity)
         await db.commit()
-    
+
     return lead
 
 
@@ -377,28 +369,23 @@ async def archive_lead(
     """Archive a lead (soft delete). Requires: leads.delete"""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Check permission
-    has_permission = await check_permission(
-        user_id, "leads", "delete", db, tenant_id
-    )
+    has_permission = await check_permission(user_id, "leads", "delete", db, tenant_id)
     if not has_permission:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    
+
     result = await db.execute(
-        select(Lead).where(
-            (Lead.id == lead_id)
-            & (Lead.tenant_id == tenant_id)
-        )
+        select(Lead).where((Lead.id == lead_id) & (Lead.tenant_id == tenant_id))
     )
     lead = result.scalar()
-    
+
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     lead.is_archived = True
     await db.commit()
-    
+
     # Log activity
     activity = Activity(
         tenant_id=tenant_id,
@@ -413,7 +400,9 @@ async def archive_lead(
 
 
 # ===== Lead Tasks =====
-@router.post("/{lead_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{lead_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_lead_task(
     lead_id: UUID,
     payload: TaskCreate,
@@ -422,17 +411,14 @@ async def create_lead_task(
 ):
     """Create a task for a lead."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify lead exists
     result = await db.execute(
-        select(Lead).where(
-            (Lead.id == lead_id)
-            & (Lead.tenant_id == tenant_id)
-        )
+        select(Lead).where((Lead.id == lead_id) & (Lead.tenant_id == tenant_id))
     )
     if not result.scalar():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     task = Task(
         tenant_id=tenant_id,
         entity_type="LEAD",
@@ -458,16 +444,16 @@ async def list_lead_tasks(
 ):
     """List tasks for a lead."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     query = select(Task).where(
         (Task.tenant_id == tenant_id)
         & (Task.entity_type == "LEAD")
         & (Task.entity_id == lead_id)
     )
-    
+
     if status_filter:
         query = query.where(Task.status == status_filter)
-    
+
     query = query.order_by(desc(Task.created_at))
     result = await db.execute(query)
     tasks = result.scalars().all()
@@ -475,7 +461,9 @@ async def list_lead_tasks(
 
 
 # ===== Lead Notes =====
-@router.post("/{lead_id}/notes", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{lead_id}/notes", response_model=NoteResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_lead_note(
     lead_id: UUID,
     payload: NoteCreate,
@@ -485,17 +473,14 @@ async def create_lead_note(
     """Create a note on a lead."""
     tenant_id = UUID(claims["tenant_id"])
     user_id = UUID(claims["sub"])
-    
+
     # Verify lead exists
     result = await db.execute(
-        select(Lead).where(
-            (Lead.id == lead_id)
-            & (Lead.tenant_id == tenant_id)
-        )
+        select(Lead).where((Lead.id == lead_id) & (Lead.tenant_id == tenant_id))
     )
     if not result.scalar():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     note = Note(
         tenant_id=tenant_id,
         entity_type="LEAD",
@@ -517,13 +502,17 @@ async def list_lead_notes(
 ):
     """List notes on a lead."""
     tenant_id = UUID(claims["tenant_id"])
-    
-    query = select(Note).where(
-        (Note.tenant_id == tenant_id)
-        & (Note.entity_type == "LEAD")
-        & (Note.entity_id == lead_id)
-    ).order_by(desc(Note.created_at))
-    
+
+    query = (
+        select(Note)
+        .where(
+            (Note.tenant_id == tenant_id)
+            & (Note.entity_type == "LEAD")
+            & (Note.entity_id == lead_id)
+        )
+        .order_by(desc(Note.created_at))
+    )
+
     result = await db.execute(query)
     notes = result.scalars().all()
     return notes
@@ -538,13 +527,17 @@ async def list_lead_activities(
 ):
     """Get activity timeline for a lead."""
     tenant_id = UUID(claims["tenant_id"])
-    
-    query = select(Activity).where(
-        (Activity.tenant_id == tenant_id)
-        & (Activity.entity_type == "LEAD")
-        & (Activity.entity_id == lead_id)
-    ).order_by(desc(Activity.created_at))
-    
+
+    query = (
+        select(Activity)
+        .where(
+            (Activity.tenant_id == tenant_id)
+            & (Activity.entity_type == "LEAD")
+            & (Activity.entity_id == lead_id)
+        )
+        .order_by(desc(Activity.created_at))
+    )
+
     result = await db.execute(query)
     activities = result.scalars().all()
     return activities

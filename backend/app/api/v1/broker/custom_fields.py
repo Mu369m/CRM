@@ -30,7 +30,10 @@ class CustomFieldDefinitionCreate(BaseModel):
     group_id: UUID
     key: str = Field(..., min_length=1, max_length=100)
     label: str = Field(..., min_length=1, max_length=200)
-    field_type: str = Field(..., regex="^(TEXT|NUMBER|CURRENCY|PERCENTAGE|DATE|DATETIME|DROPDOWN|MULTI_SELECT|CHECKBOX|RADIO|PHONE|EMAIL|URL|LONG_TEXT|FILE|IMAGE|COUNTRY|USER_SELECT|IB_SELECT)$")
+    field_type: str = Field(
+        ...,
+        pattern="^(TEXT|NUMBER|CURRENCY|PERCENTAGE|DATE|DATETIME|DROPDOWN|MULTI_SELECT|CHECKBOX|RADIO|PHONE|EMAIL|URL|LONG_TEXT|FILE|IMAGE|COUNTRY|USER_SELECT|IB_SELECT)$",
+    )
     description: str | None = None
     is_required: bool = False
     is_searchable: bool = True
@@ -78,7 +81,9 @@ class CustomFieldDefinitionResponse(BaseModel):
 
 class CustomFieldGroupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    entity_type: str = Field(..., regex="^(LEAD|CLIENT|IB|ACCOUNT|DEPOSIT|WITHDRAWAL|KYC)$")
+    entity_type: str = Field(
+        ..., pattern="^(LEAD|CLIENT|IB|ACCOUNT|DEPOSIT|WITHDRAWAL|KYC)$"
+    )
     display_order: int = 0
 
 
@@ -112,7 +117,11 @@ class CustomFieldValueResponse(BaseModel):
 
 
 # ===== Endpoints =====
-@router.post("/groups", response_model=CustomFieldGroupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/groups",
+    response_model=CustomFieldGroupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_field_group(
     payload: CustomFieldGroupCreate,
     claims: dict = Depends(current_claims),
@@ -120,7 +129,7 @@ async def create_field_group(
 ):
     """Create a new custom field group."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify group doesn't exist
     result = await db.execute(
         select(CustomFieldGroup).where(
@@ -129,8 +138,10 @@ async def create_field_group(
         )
     )
     if result.scalar():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group already exists")
-    
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Group already exists"
+        )
+
     group = CustomFieldGroup(
         tenant_id=tenant_id,
         name=payload.name,
@@ -151,14 +162,12 @@ async def list_field_groups(
 ):
     """List all custom field groups for a tenant."""
     tenant_id = UUID(claims["tenant_id"])
-    
-    query = select(CustomFieldGroup).where(
-        CustomFieldGroup.tenant_id == tenant_id
-    )
-    
+
+    query = select(CustomFieldGroup).where(CustomFieldGroup.tenant_id == tenant_id)
+
     if entity_type:
         query = query.where(CustomFieldGroup.entity_type == entity_type)
-    
+
     query = query.order_by(CustomFieldGroup.display_order)
     result = await db.execute(query)
     groups = result.scalars().all()
@@ -173,7 +182,7 @@ async def get_field_group(
 ):
     """Get a specific custom field group."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(CustomFieldGroup).where(
             (CustomFieldGroup.id == group_id)
@@ -181,14 +190,18 @@ async def get_field_group(
         )
     )
     group = result.scalar()
-    
+
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     return group
 
 
-@router.post("/groups/{group_id}/fields", response_model=CustomFieldDefinitionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/groups/{group_id}/fields",
+    response_model=CustomFieldDefinitionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_field_definition(
     group_id: UUID,
     payload: CustomFieldDefinitionCreate,
@@ -197,7 +210,7 @@ async def create_field_definition(
 ):
     """Create a new custom field definition."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify group exists
     result = await db.execute(
         select(CustomFieldGroup).where(
@@ -206,8 +219,10 @@ async def create_field_definition(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+        )
+
     # Verify unique key per tenant
     result = await db.execute(
         select(CustomFieldDefinition).where(
@@ -216,8 +231,10 @@ async def create_field_definition(
         )
     )
     if result.scalar():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Field key already exists")
-    
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Field key already exists"
+        )
+
     field = CustomFieldDefinition(
         tenant_id=tenant_id,
         group_id=group_id,
@@ -247,7 +264,7 @@ async def get_field_definition(
 ):
     """Get a specific custom field definition."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(CustomFieldDefinition).where(
             (CustomFieldDefinition.id == field_id)
@@ -255,10 +272,10 @@ async def get_field_definition(
         )
     )
     field = result.scalar()
-    
+
     if not field:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     return field
 
 
@@ -271,7 +288,7 @@ async def update_field_definition(
 ):
     """Update a custom field definition."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(CustomFieldDefinition).where(
             (CustomFieldDefinition.id == field_id)
@@ -279,18 +296,20 @@ async def update_field_definition(
         )
     )
     field = result.scalar()
-    
+
     if not field:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     # Update fields
     update_data = payload.dict(exclude_unset=True)
     if "options_json" in update_data and update_data["options_json"]:
-        update_data["options_json"] = [opt.dict() for opt in update_data["options_json"]]
-    
+        update_data["options_json"] = [
+            opt.dict() for opt in update_data["options_json"]
+        ]
+
     for key, value in update_data.items():
         setattr(field, key, value)
-    
+
     await db.commit()
     await db.refresh(field)
     return field
@@ -304,7 +323,7 @@ async def delete_field_definition(
 ):
     """Delete a custom field definition."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     result = await db.execute(
         select(CustomFieldDefinition).where(
             (CustomFieldDefinition.id == field_id)
@@ -312,15 +331,19 @@ async def delete_field_definition(
         )
     )
     field = result.scalar()
-    
+
     if not field:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     await db.delete(field)
     await db.commit()
 
 
-@router.post("/values", response_model=CustomFieldValueResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/values",
+    response_model=CustomFieldValueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def set_field_value(
     payload: CustomFieldValueCreate,
     field_id: UUID = Query(...),
@@ -329,7 +352,7 @@ async def set_field_value(
 ):
     """Set a custom field value for an entity."""
     tenant_id = UUID(claims["tenant_id"])
-    
+
     # Verify field exists and belongs to tenant
     result = await db.execute(
         select(CustomFieldDefinition).where(
@@ -338,8 +361,10 @@ async def set_field_value(
         )
     )
     if not result.scalar():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Field not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Field not found"
+        )
+
     # Check if value already exists
     result = await db.execute(
         select(CustomFieldValue).where(
@@ -348,7 +373,7 @@ async def set_field_value(
         )
     )
     value_obj = result.scalar()
-    
+
     if value_obj:
         value_obj.value = payload.value
     else:
@@ -358,7 +383,7 @@ async def set_field_value(
             value=payload.value,
         )
         db.add(value_obj)
-    
+
     await db.commit()
     await db.refresh(value_obj)
     return value_obj
@@ -372,13 +397,11 @@ async def get_entity_field_values(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get custom field values for an entity."""
-    query = select(CustomFieldValue).where(
-        CustomFieldValue.entity_id == entity_id
-    )
-    
+    query = select(CustomFieldValue).where(CustomFieldValue.entity_id == entity_id)
+
     if field_ids:
         query = query.where(CustomFieldValue.field_id.in_(field_ids))
-    
+
     result = await db.execute(query)
     values = result.scalars().all()
     return values

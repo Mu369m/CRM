@@ -9,7 +9,7 @@ from sqlalchemy import select, desc, func, and_
 from typing import Literal
 
 from app.db import get_db
-from app.models.master import Transaction
+from app.models import Transaction
 from app.middleware.rbac_enforcer import require_permission
 from app.middleware.audit_logger import AuditLogger
 from app.security import get_current_user
@@ -133,9 +133,7 @@ async def update_transaction_status(
     data: TransactionStatusUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
-    _=Depends(
-        require_permission("deposits.approve", "withdrawals.approve")
-    ),
+    _=Depends(require_permission("deposits.approve", "withdrawals.approve")),
 ):
     """Approve or reject transaction"""
     result = await db.execute(
@@ -152,7 +150,9 @@ async def update_transaction_status(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     if transaction.status != "PENDING":
-        raise HTTPException(status_code=400, detail="Can only update pending transactions")
+        raise HTTPException(
+            status_code=400, detail="Can only update pending transactions"
+        )
 
     old_status = transaction.status
     transaction.status = data.status
