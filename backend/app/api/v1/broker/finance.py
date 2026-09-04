@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.db_router import get_tenant_db
@@ -107,11 +108,21 @@ async def request_finance_transaction(
     claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))],
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Transaction:
+    tenant_id = UUID(claims["tenant_id"])
+    existing = await db.scalar(
+        select(Transaction).where(
+            Transaction.tenant_id == tenant_id,
+            Transaction.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing:
+        return existing
+
     if payload.gateway_id:
         gateway = await db.scalar(
             select(PaymentGateway).where(
                 PaymentGateway.id == payload.gateway_id,
-                PaymentGateway.tenant_id == UUID(claims["tenant_id"]),
+                PaymentGateway.tenant_id == tenant_id,
                 PaymentGateway.is_active.is_(True),
             )
         )
@@ -120,12 +131,27 @@ async def request_finance_transaction(
                 status_code=404, detail="Active payment gateway not found"
             )
     transaction = Transaction(
-        tenant_id=UUID(claims["tenant_id"]),
+        tenant_id=tenant_id,
         trader_id=UUID(claims["sub"]),
         **payload.model_dump(),
     )
     db.add(transaction)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = await db.scalar(
+            select(Transaction).where(
+                Transaction.tenant_id == tenant_id,
+                Transaction.idempotency_key == payload.idempotency_key,
+            )
+        )
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Unable to safely resolve duplicate transaction request",
+            )
+        return existing
     await db.refresh(transaction)
     return transaction
 
