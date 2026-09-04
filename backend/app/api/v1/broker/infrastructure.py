@@ -50,6 +50,10 @@ class InfrastructureResponse(BaseModel):
     last_error: str | None
     last_verified_at: str | None
     masked_credentials: dict | None
+    entitlement_allowed: bool
+    entitlement_included: bool
+    entitlement_billable: bool
+    quota_gb: int | None
 
 
 PROVIDERS = {
@@ -84,7 +88,9 @@ def _safe_config(config: dict) -> dict:
     }
 
 
-def _response(row: InfrastructureConfig | None) -> InfrastructureResponse | None:
+def _response(
+    row: InfrastructureConfig | None, entitlement=None
+) -> InfrastructureResponse | None:
     if not row:
         return None
     masked = None
@@ -114,6 +120,10 @@ def _response(row: InfrastructureConfig | None) -> InfrastructureResponse | None
         if row.last_verified_at
         else None,
         masked_credentials=masked,
+        entitlement_allowed=entitlement.allowed if entitlement else False,
+        entitlement_included=entitlement.included if entitlement else False,
+        entitlement_billable=entitlement.billable if entitlement else False,
+        quota_gb=entitlement.quota_gb if entitlement else None,
     )
 
 
@@ -148,13 +158,22 @@ async def get_infrastructure(
     claims: BrokerClaims,
     db: AsyncSession = Depends(get_tenant_db),
 ) -> InfrastructureResponse | None:
+    tenant_id = UUID(claims["tenant_id"])
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     row = await db.scalar(
         select(InfrastructureConfig).where(
-            InfrastructureConfig.tenant_id == UUID(claims["tenant_id"]),
+            InfrastructureConfig.tenant_id == tenant_id,
             InfrastructureConfig.kind == kind,
         )
     )
-    return _response(row)
+    entitlement = (
+        get_infrastructure_entitlement(tenant.plan, kind, row.mode)
+        if row
+        else get_infrastructure_entitlement(tenant.plan, kind, "SAAS")
+    )
+    return _response(row, entitlement)
 
 
 @router.put("/{kind}", response_model=InfrastructureResponse)
@@ -262,7 +281,7 @@ async def configure_infrastructure(
     )
     await db.commit()
     await db.refresh(row)
-    return _response(row)
+    return _response(row, entitlement)
 
 
 @router.post("/{kind}/activate", response_model=InfrastructureResponse)
@@ -315,4 +334,4 @@ async def activate_infrastructure(
     )
     await db.commit()
     await db.refresh(row)
-    return _response(row)
+    return _response(row, entitlement)

@@ -25,6 +25,10 @@ type Infrastructure = {
   last_error: string | null;
   last_verified_at: string | null;
   masked_credentials: Record<string, string> | null;
+  entitlement_allowed: boolean;
+  entitlement_included: boolean;
+  entitlement_billable: boolean;
+  quota_gb: number | null;
 };
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -227,6 +231,12 @@ function InfrastructureCard({
               {current?.active
                 ? "Active"
                 : (current?.status ?? "Not configured")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {current?.quota_gb != null
+                ? `Quota: ${current.quota_gb} GB`
+                : "Quota: Not configured"}
+              {current?.entitlement_billable ? " · Billable add-on" : ""}
             </p>
           </div>
         </div>
