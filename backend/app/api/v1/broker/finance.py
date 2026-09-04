@@ -12,7 +12,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.db_router import get_tenant_db
-from ....models import LedgerEntry, LedgerEntryType, PaymentGateway, PaymentGatewayType, Role, Transaction, TransactionStatus, TransactionType, User, Wallet
+from ....models import (
+    LedgerEntry,
+    LedgerEntryType,
+    PaymentGateway,
+    PaymentGatewayType,
+    Role,
+    Transaction,
+    TransactionStatus,
+    TransactionType,
+    User,
+    Wallet,
+)
 from ....security import require_roles
 
 router = APIRouter(tags=["Finance"])
@@ -24,7 +35,9 @@ class GatewayConfig(BaseModel):
     qr_code: str | None = Field(default=None, max_length=500)
     iban: str | None = Field(default=None, max_length=80)
     swift: str | None = Field(default=None, max_length=40)
-    fee_percentage: Decimal = Field(default=Decimal("0"), ge=0, le=100, max_digits=8, decimal_places=4)
+    fee_percentage: Decimal = Field(
+        default=Decimal("0"), ge=0, le=100, max_digits=8, decimal_places=4
+    )
 
 
 class GatewayPayload(BaseModel):
@@ -45,6 +58,7 @@ class TransactionRequest(BaseModel):
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     gateway_id: UUID | None = None
     payment_proof_url: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=16, max_length=120)
 
 
 class TransactionResponse(BaseModel):
@@ -77,16 +91,39 @@ class SettlementResponse(BaseModel):
     wallet_balance: Decimal
 
 
-broker_claims = Annotated[dict[str, str], Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.FINANCE))]
+broker_claims = Annotated[
+    dict[str, str],
+    Depends(require_roles(Role.SUPER_ADMIN, Role.BROKER_ADMIN, Role.FINANCE)),
+]
 
 
-@router.post("/api/v1/trader/finance/request", response_model=TransactionResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_finance_transaction(payload: TransactionRequest, claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))], db: AsyncSession = Depends(get_tenant_db)) -> Transaction:
+@router.post(
+    "/api/v1/trader/finance/request",
+    response_model=TransactionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_finance_transaction(
+    payload: TransactionRequest,
+    claims: Annotated[dict[str, str], Depends(require_roles(Role.TRADER))],
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Transaction:
     if payload.gateway_id:
-        gateway = await db.scalar(select(PaymentGateway).where(PaymentGateway.id == payload.gateway_id, PaymentGateway.tenant_id == UUID(claims["tenant_id"]), PaymentGateway.is_active.is_(True)))
+        gateway = await db.scalar(
+            select(PaymentGateway).where(
+                PaymentGateway.id == payload.gateway_id,
+                PaymentGateway.tenant_id == UUID(claims["tenant_id"]),
+                PaymentGateway.is_active.is_(True),
+            )
+        )
         if not gateway:
-            raise HTTPException(status_code=404, detail="Active payment gateway not found")
-    transaction = Transaction(tenant_id=UUID(claims["tenant_id"]), trader_id=UUID(claims["sub"]), **payload.model_dump())
+            raise HTTPException(
+                status_code=404, detail="Active payment gateway not found"
+            )
+    transaction = Transaction(
+        tenant_id=UUID(claims["tenant_id"]),
+        trader_id=UUID(claims["sub"]),
+        **payload.model_dump(),
+    )
     db.add(transaction)
     await db.commit()
     await db.refresh(transaction)
@@ -108,42 +145,108 @@ async def list_transactions(
         filters.append(Transaction.status == transaction_status)
     if transaction_type:
         filters.append(Transaction.type == transaction_type)
-    items = await db.scalars(select(Transaction).where(*filters).order_by(Transaction.created_at.desc()).offset(offset).limit(limit))
+    items = await db.scalars(
+        select(Transaction)
+        .where(*filters)
+        .order_by(Transaction.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     total = await db.scalar(select(func.count(Transaction.id)).where(*filters))
-    return TransactionPage(items=list(items), total=total or 0, offset=offset, limit=limit)
+    return TransactionPage(
+        items=list(items), total=total or 0, offset=offset, limit=limit
+    )
 
 
-@router.post("/api/v1/broker/finance/transactions/{transaction_id}/approve", response_model=SettlementResponse)
-async def approve_transaction(transaction_id: UUID, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> SettlementResponse:
-    transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.tenant_id == UUID(claims["tenant_id"])).with_for_update())
+@router.post(
+    "/api/v1/broker/finance/transactions/{transaction_id}/approve",
+    response_model=SettlementResponse,
+)
+async def approve_transaction(
+    transaction_id: UUID,
+    claims: broker_claims,
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SettlementResponse:
+    transaction = await db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.tenant_id == UUID(claims["tenant_id"]),
+        )
+        .with_for_update()
+    )
     if not transaction or transaction.status != TransactionStatus.PENDING:
         raise HTTPException(status_code=404, detail="Pending transaction not found")
     await db.scalar(
         select(User)
-        .where(User.id == transaction.trader_id, User.tenant_id == transaction.tenant_id)
+        .where(
+            User.id == transaction.trader_id, User.tenant_id == transaction.tenant_id
+        )
         .with_for_update()
     )
-    wallet = await db.scalar(select(Wallet).where(Wallet.owner_id == transaction.trader_id, Wallet.tenant_id == transaction.tenant_id, Wallet.currency == transaction.currency).with_for_update())
+    wallet = await db.scalar(
+        select(Wallet)
+        .where(
+            Wallet.owner_id == transaction.trader_id,
+            Wallet.tenant_id == transaction.tenant_id,
+            Wallet.currency == transaction.currency,
+        )
+        .with_for_update()
+    )
     if not wallet:
-        wallet = Wallet(tenant_id=transaction.tenant_id, owner_id=transaction.trader_id, currency=transaction.currency, balance=Decimal("0"))
+        wallet = Wallet(
+            tenant_id=transaction.tenant_id,
+            owner_id=transaction.trader_id,
+            currency=transaction.currency,
+            balance=Decimal("0"),
+        )
         db.add(wallet)
         await db.flush()
-    signed_amount = transaction.amount if transaction.type == TransactionType.DEPOSIT else -transaction.amount
+    signed_amount = (
+        transaction.amount
+        if transaction.type == TransactionType.DEPOSIT
+        else -transaction.amount
+    )
     if signed_amount < 0 and wallet.balance + signed_amount < 0:
         raise HTTPException(status_code=409, detail="Insufficient wallet balance")
     wallet.balance += signed_amount
     transaction.status = TransactionStatus.APPROVED
     transaction.rejection_note = None
-    ledger_type = LedgerEntryType.DEPOSIT if signed_amount > 0 else LedgerEntryType.WITHDRAWAL
-    db.add(LedgerEntry(wallet_id=wallet.id, entry_type=ledger_type, amount=signed_amount, reference=f"transaction:{transaction.id}", note=f"Approved {transaction.type.value.lower()}"))
+    ledger_type = (
+        LedgerEntryType.DEPOSIT if signed_amount > 0 else LedgerEntryType.WITHDRAWAL
+    )
+    db.add(
+        LedgerEntry(
+            wallet_id=wallet.id,
+            entry_type=ledger_type,
+            amount=signed_amount,
+            reference=f"transaction:{transaction.id}",
+            note=f"Approved {transaction.type.value.lower()}",
+        )
+    )
     await db.commit()
     await db.refresh(transaction)
     return SettlementResponse(transaction=transaction, wallet_balance=wallet.balance)
 
 
-@router.post("/api/v1/broker/finance/transactions/{transaction_id}/reject", response_model=TransactionResponse)
-async def reject_transaction(transaction_id: UUID, payload: RejectionPayload, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> Transaction:
-    transaction = await db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.tenant_id == UUID(claims["tenant_id"])).with_for_update())
+@router.post(
+    "/api/v1/broker/finance/transactions/{transaction_id}/reject",
+    response_model=TransactionResponse,
+)
+async def reject_transaction(
+    transaction_id: UUID,
+    payload: RejectionPayload,
+    claims: broker_claims,
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Transaction:
+    transaction = await db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.tenant_id == UUID(claims["tenant_id"]),
+        )
+        .with_for_update()
+    )
     if not transaction or transaction.status != TransactionStatus.PENDING:
         raise HTTPException(status_code=404, detail="Pending transaction not found")
     transaction.status = TransactionStatus.REJECTED
@@ -154,14 +257,34 @@ async def reject_transaction(transaction_id: UUID, payload: RejectionPayload, cl
 
 
 @router.get("/api/v1/broker/finance/gateways", response_model=list[GatewayResponse])
-async def list_gateways(claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> list[PaymentGateway]:
-    gateways = await db.scalars(select(PaymentGateway).where(PaymentGateway.tenant_id == UUID(claims["tenant_id"])).order_by(PaymentGateway.name))
+async def list_gateways(
+    claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)
+) -> list[PaymentGateway]:
+    gateways = await db.scalars(
+        select(PaymentGateway)
+        .where(PaymentGateway.tenant_id == UUID(claims["tenant_id"]))
+        .order_by(PaymentGateway.name)
+    )
     return list(gateways)
 
 
-@router.post("/api/v1/broker/finance/gateways", response_model=GatewayResponse, status_code=status.HTTP_201_CREATED)
-async def create_gateway(payload: GatewayPayload, claims: broker_claims, db: AsyncSession = Depends(get_tenant_db)) -> PaymentGateway:
-    gateway = PaymentGateway(tenant_id=UUID(claims["tenant_id"]), name=payload.name.strip(), type=payload.type, is_active=payload.is_active, config_json=payload.config_json.model_dump(mode="json"))
+@router.post(
+    "/api/v1/broker/finance/gateways",
+    response_model=GatewayResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_gateway(
+    payload: GatewayPayload,
+    claims: broker_claims,
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentGateway:
+    gateway = PaymentGateway(
+        tenant_id=UUID(claims["tenant_id"]),
+        name=payload.name.strip(),
+        type=payload.type,
+        is_active=payload.is_active,
+        config_json=payload.config_json.model_dump(mode="json"),
+    )
     db.add(gateway)
     await db.commit()
     await db.refresh(gateway)
