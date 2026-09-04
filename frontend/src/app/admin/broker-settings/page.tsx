@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Edit2, Settings, Users, Zap, Palette, Database } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Settings,
+  Users,
+  Zap,
+  Palette,
+  Database,
+} from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
 interface TabConfig {
@@ -32,9 +41,15 @@ export default function BrokerAdminPage() {
     <MainLayout>
       <main className="mx-auto max-w-6xl">
         <header className="mb-8">
-          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">Administration</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Broker Configuration</h1>
-          <p className="mt-2 text-sm text-slate-500">Customize your CRM instance and manage access control.</p>
+          <p className="text-[10px] uppercase tracking-[.2em] text-cyan-400">
+            Administration
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">
+            Broker Configuration
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Customize your CRM instance and manage access control.
+          </p>
         </header>
 
         {message && (
@@ -69,11 +84,17 @@ export default function BrokerAdminPage() {
 
           {/* Main Content */}
           <div className="rounded-lg border border-slate-800 bg-[#0D121F] p-6 lg:col-span-4">
-            {activeTab === "general" && <GeneralSettingsTab onMessage={setMessage} />}
+            {activeTab === "general" && (
+              <GeneralSettingsTab onMessage={setMessage} />
+            )}
             {activeTab === "roles" && <RolesTab onMessage={setMessage} />}
             {activeTab === "branding" && <BrandingTab onMessage={setMessage} />}
-            {activeTab === "fields" && <CustomFieldsTab onMessage={setMessage} />}
-            {activeTab === "pipelines" && <PipelinesTab onMessage={setMessage} />}
+            {activeTab === "fields" && (
+              <CustomFieldsTab onMessage={setMessage} />
+            )}
+            {activeTab === "pipelines" && (
+              <PipelinesTab onMessage={setMessage} />
+            )}
           </div>
         </div>
       </main>
@@ -81,7 +102,11 @@ export default function BrokerAdminPage() {
   );
 }
 
-function GeneralSettingsTab({ onMessage }: { onMessage: (msg: string) => void }) {
+function GeneralSettingsTab({
+  onMessage,
+}: {
+  onMessage: (msg: string) => void;
+}) {
   const [settings, setSettings] = useState({
     company_name: "",
     support_email: "",
@@ -101,7 +126,9 @@ function GeneralSettingsTab({ onMessage }: { onMessage: (msg: string) => void })
       if (!response.ok) throw new Error("Failed to save");
       onMessage("Settings saved successfully.");
     } catch (e) {
-      onMessage((e instanceof Error ? e.message : "Error saving settings") + " ❌");
+      onMessage(
+        (e instanceof Error ? e.message : "Error saving settings") + " ❌",
+      );
     } finally {
       setSaving(false);
     }
@@ -113,22 +140,30 @@ function GeneralSettingsTab({ onMessage }: { onMessage: (msg: string) => void })
 
       <div className="space-y-4">
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Company Name</span>
+          <span className="text-xs font-medium text-slate-300">
+            Company Name
+          </span>
           <input
             type="text"
             value={settings.company_name}
-            onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
+            onChange={(e) =>
+              setSettings({ ...settings, company_name: e.target.value })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             placeholder="Your Company"
           />
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Support Email</span>
+          <span className="text-xs font-medium text-slate-300">
+            Support Email
+          </span>
           <input
             type="email"
             value={settings.support_email}
-            onChange={(e) => setSettings({ ...settings, support_email: e.target.value })}
+            onChange={(e) =>
+              setSettings({ ...settings, support_email: e.target.value })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             placeholder="support@company.com"
           />
@@ -139,20 +174,29 @@ function GeneralSettingsTab({ onMessage }: { onMessage: (msg: string) => void })
           <input
             type="text"
             value={settings.meta_title}
-            onChange={(e) => setSettings({ ...settings, meta_title: e.target.value })}
+            onChange={(e) =>
+              setSettings({ ...settings, meta_title: e.target.value })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             placeholder="Brokerage CRM"
           />
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Max IB Levels</span>
+          <span className="text-xs font-medium text-slate-300">
+            Max IB Levels
+          </span>
           <input
             type="number"
             min="1"
             max="10"
             value={settings.max_ib_levels}
-            onChange={(e) => setSettings({ ...settings, max_ib_levels: parseInt(e.target.value) })}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                max_ib_levels: parseInt(e.target.value),
+              })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
           />
         </label>
@@ -178,7 +222,9 @@ function RolesTab({ onMessage }: { onMessage: (msg: string) => void }) {
     async function loadRoles() {
       try {
         const response = await fetch("/api/v1/broker/roles", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
         });
         if (!response.ok) throw new Error("Failed to load");
         const data = await response.json();
@@ -235,15 +281,22 @@ function RolesTab({ onMessage }: { onMessage: (msg: string) => void }) {
 
       <div className="space-y-2">
         {loading ? (
-          <div className="text-center py-6 text-slate-500">Loading roles...</div>
+          <div className="text-center py-6 text-slate-500">
+            Loading roles...
+          </div>
         ) : roles.length === 0 ? (
           <div className="text-center py-6 text-slate-500">No roles yet.</div>
         ) : (
           roles.map((role) => (
-            <div key={role.id} className="flex items-center justify-between rounded border border-slate-800 bg-slate-800/30 p-3">
+            <div
+              key={role.id}
+              className="flex items-center justify-between rounded border border-slate-800 bg-slate-800/30 p-3"
+            >
               <div>
                 <p className="font-medium text-white">{role.name}</p>
-                <p className="text-[10px] text-slate-500">{role.description || "No description"}</p>
+                <p className="text-[10px] text-slate-500">
+                  {role.description || "No description"}
+                </p>
               </div>
               <div className="flex gap-1">
                 <button className="p-1.5 text-slate-400 hover:text-cyan-300">
@@ -289,40 +342,54 @@ function BrandingTab({ onMessage }: { onMessage: (msg: string) => void }) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-white">Branding & Customization</h2>
+      <h2 className="text-lg font-semibold text-white">
+        Branding & Customization
+      </h2>
 
       <div className="space-y-4">
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Primary Color</span>
+          <span className="text-xs font-medium text-slate-300">
+            Primary Color
+          </span>
           <div className="mt-2 flex gap-2">
             <input
               type="color"
               value={branding.primary_color}
-              onChange={(e) => setBranding({ ...branding, primary_color: e.target.value })}
+              onChange={(e) =>
+                setBranding({ ...branding, primary_color: e.target.value })
+              }
               className="size-12 rounded border border-slate-700 cursor-pointer"
             />
             <input
               type="text"
               value={branding.primary_color}
-              onChange={(e) => setBranding({ ...branding, primary_color: e.target.value })}
+              onChange={(e) =>
+                setBranding({ ...branding, primary_color: e.target.value })
+              }
               className="flex-1 rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm font-mono text-slate-200"
             />
           </div>
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Secondary Color</span>
+          <span className="text-xs font-medium text-slate-300">
+            Secondary Color
+          </span>
           <div className="mt-2 flex gap-2">
             <input
               type="color"
               value={branding.secondary_color}
-              onChange={(e) => setBranding({ ...branding, secondary_color: e.target.value })}
+              onChange={(e) =>
+                setBranding({ ...branding, secondary_color: e.target.value })
+              }
               className="size-12 rounded border border-slate-700 cursor-pointer"
             />
             <input
               type="text"
               value={branding.secondary_color}
-              onChange={(e) => setBranding({ ...branding, secondary_color: e.target.value })}
+              onChange={(e) =>
+                setBranding({ ...branding, secondary_color: e.target.value })
+              }
               className="flex-1 rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm font-mono text-slate-200"
             />
           </div>
@@ -333,18 +400,24 @@ function BrandingTab({ onMessage }: { onMessage: (msg: string) => void }) {
           <input
             type="url"
             value={branding.logo_url}
-            onChange={(e) => setBranding({ ...branding, logo_url: e.target.value })}
+            onChange={(e) =>
+              setBranding({ ...branding, logo_url: e.target.value })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             placeholder="https://example.com/logo.png"
           />
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-300">Favicon URL</span>
+          <span className="text-xs font-medium text-slate-300">
+            Favicon URL
+          </span>
           <input
             type="url"
             value={branding.favicon_url}
-            onChange={(e) => setBranding({ ...branding, favicon_url: e.target.value })}
+            onChange={(e) =>
+              setBranding({ ...branding, favicon_url: e.target.value })
+            }
             className="mt-2 w-full rounded border border-slate-700 bg-[#070A11] px-3 py-2 text-sm text-slate-200"
             placeholder="https://example.com/favicon.ico"
           />
@@ -365,17 +438,25 @@ function BrandingTab({ onMessage }: { onMessage: (msg: string) => void }) {
 function CustomFieldsTab({ onMessage }: { onMessage: (msg: string) => void }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-white">Custom Fields Management</h2>
-      <p className="text-sm text-slate-400">Create custom fields for Leads, Clients, and IBs</p>
-      
+      <h2 className="text-lg font-semibold text-white">
+        Custom Fields Management
+      </h2>
+      <p className="text-sm text-slate-400">
+        Create custom fields for Leads, Clients, and IBs
+      </p>
+
       <div className="space-y-3">
         <div className="rounded border border-slate-700 bg-slate-800/30 p-4">
           <p className="font-medium text-white">Lead Custom Fields</p>
-          <p className="mt-1 text-xs text-slate-400">Coming soon: Add custom fields for leads</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Coming soon: Add custom fields for leads
+          </p>
         </div>
         <div className="rounded border border-slate-700 bg-slate-800/30 p-4">
           <p className="font-medium text-white">Client Custom Fields</p>
-          <p className="mt-1 text-xs text-slate-400">Coming soon: Add custom fields for clients</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Coming soon: Add custom fields for clients
+          </p>
         </div>
       </div>
     </div>
@@ -385,17 +466,23 @@ function CustomFieldsTab({ onMessage }: { onMessage: (msg: string) => void }) {
 function PipelinesTab({ onMessage }: { onMessage: (msg: string) => void }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-white">Pipeline Configuration</h2>
+      <h2 className="text-lg font-semibold text-white">
+        Pipeline Configuration
+      </h2>
       <p className="text-sm text-slate-400">Manage CRM pipelines and stages</p>
-      
+
       <div className="space-y-3">
         <div className="rounded border border-slate-700 bg-slate-800/30 p-4">
           <p className="font-medium text-white">Lead Pipeline</p>
-          <p className="mt-1 text-xs text-slate-400">Stages: New Lead → Contacted → Interested → Qualified → Won/Lost</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Stages: New Lead → Contacted → Interested → Qualified → Won/Lost
+          </p>
         </div>
         <div className="rounded border border-slate-700 bg-slate-800/30 p-4">
           <p className="font-medium text-white">Client Pipeline</p>
-          <p className="mt-1 text-xs text-slate-400">Stages: Prospect → KYC → Active → Trading → Inactive/Closed</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Stages: Prospect → KYC → Active → Trading → Inactive/Closed
+          </p>
         </div>
       </div>
     </div>

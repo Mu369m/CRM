@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface WorkflowDetail {
   id: string;
@@ -34,20 +34,20 @@ interface WorkflowCondition {
 }
 
 const ACTION_TYPES = [
-  { value: 'send_notification', label: 'Send Notification' },
-  { value: 'assign_lead', label: 'Assign Lead' },
-  { value: 'create_task', label: 'Create Task' },
-  { value: 'update_field', label: 'Update Field' },
-  { value: 'send_email', label: 'Send Email' },
+  { value: "send_notification", label: "Send Notification" },
+  { value: "assign_lead", label: "Assign Lead" },
+  { value: "create_task", label: "Create Task" },
+  { value: "update_field", label: "Update Field" },
+  { value: "send_email", label: "Send Email" },
 ];
 
 const OPERATORS = [
-  { value: 'equals', label: 'Equals' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'greater_than', label: 'Greater Than' },
-  { value: 'less_than', label: 'Less Than' },
-  { value: 'is_empty', label: 'Is Empty' },
-  { value: 'is_not_empty', label: 'Is Not Empty' },
+  { value: "equals", label: "Equals" },
+  { value: "contains", label: "Contains" },
+  { value: "greater_than", label: "Greater Than" },
+  { value: "less_than", label: "Less Than" },
+  { value: "is_empty", label: "Is Empty" },
+  { value: "is_not_empty", label: "Is Not Empty" },
 ];
 
 export default function WorkflowDetailPage() {
@@ -57,7 +57,7 @@ export default function WorkflowDetailPage() {
 
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [expandedSections, setExpandedSections] = useState({
     conditions: true,
     actions: true,
@@ -65,26 +65,26 @@ export default function WorkflowDetailPage() {
   const [showAddAction, setShowAddAction] = useState(false);
   const [showAddCondition, setShowAddCondition] = useState(false);
   const [newAction, setNewAction] = useState({
-    action_type: 'send_notification',
+    action_type: "send_notification",
     action_config: {},
   });
   const [newCondition, setNewCondition] = useState({
-    field_name: '',
-    operator: 'equals',
-    value: '',
-    logic_operator: 'AND',
+    field_name: "",
+    operator: "equals",
+    value: "",
+    logic_operator: "AND",
   });
 
   const fetchWorkflow = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/v1/broker/workflows/${workflowId}`);
-      if (!response.ok) throw new Error('Failed to fetch workflow');
+      if (!response.ok) throw new Error("Failed to fetch workflow");
       const data = await response.json();
       setWorkflow(data);
-      setError('');
+      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load workflow');
+      setError(err instanceof Error ? err.message : "Failed to load workflow");
     } finally {
       setLoading(false);
     }
@@ -104,69 +104,77 @@ export default function WorkflowDetailPage() {
 
   const handleAddAction = async () => {
     try {
-      const response = await fetch(`/api/v1/broker/workflows/${workflowId}/actions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newAction,
-          order: (workflow?.actions.length || 0) + 1,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to add action');
-      setNewAction({ action_type: 'send_notification', action_config: {} });
+      const response = await fetch(
+        `/api/v1/broker/workflows/${workflowId}/actions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...newAction,
+            order: (workflow?.actions.length || 0) + 1,
+          }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed to add action");
+      setNewAction({ action_type: "send_notification", action_config: {} });
       setShowAddAction(false);
       await fetchWorkflow();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add action');
+      setError(err instanceof Error ? err.message : "Failed to add action");
     }
   };
 
   const handleAddCondition = async () => {
     try {
-      const response = await fetch(`/api/v1/broker/workflows/${workflowId}/conditions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCondition),
-      });
-      if (!response.ok) throw new Error('Failed to add condition');
+      const response = await fetch(
+        `/api/v1/broker/workflows/${workflowId}/conditions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newCondition),
+        },
+      );
+      if (!response.ok) throw new Error("Failed to add condition");
       setNewCondition({
-        field_name: '',
-        operator: 'equals',
-        value: '',
-        logic_operator: 'AND',
+        field_name: "",
+        operator: "equals",
+        value: "",
+        logic_operator: "AND",
       });
       setShowAddCondition(false);
       await fetchWorkflow();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add condition');
+      setError(err instanceof Error ? err.message : "Failed to add condition");
     }
   };
 
   const handleDeleteAction = async (actionId: string) => {
-    if (!confirm('Delete this action?')) return;
+    if (!confirm("Delete this action?")) return;
     try {
       const response = await fetch(
         `/api/v1/broker/workflows/${workflowId}/actions/${actionId}`,
-        { method: 'DELETE' }
+        { method: "DELETE" },
       );
-      if (!response.ok) throw new Error('Failed to delete action');
+      if (!response.ok) throw new Error("Failed to delete action");
       await fetchWorkflow();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete action');
+      setError(err instanceof Error ? err.message : "Failed to delete action");
     }
   };
 
   const handleDeleteCondition = async (conditionId: string) => {
-    if (!confirm('Delete this condition?')) return;
+    if (!confirm("Delete this condition?")) return;
     try {
       const response = await fetch(
         `/api/v1/broker/workflows/${workflowId}/conditions/${conditionId}`,
-        { method: 'DELETE' }
+        { method: "DELETE" },
       );
-      if (!response.ok) throw new Error('Failed to delete condition');
+      if (!response.ok) throw new Error("Failed to delete condition");
       await fetchWorkflow();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete condition');
+      setError(
+        err instanceof Error ? err.message : "Failed to delete condition",
+      );
     }
   };
 
@@ -182,7 +190,7 @@ export default function WorkflowDetailPage() {
     return (
       <div className="min-h-screen bg-[#0D121F] text-white p-6">
         <div className="max-w-4xl mx-auto bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-lg">
-          {error || 'Workflow not found'}
+          {error || "Workflow not found"}
         </div>
       </div>
     );
@@ -246,7 +254,7 @@ export default function WorkflowDetailPage() {
         {/* Conditions Section */}
         <div className="bg-[#1a2332] border border-gray-700 rounded-lg overflow-hidden mb-8">
           <button
-            onClick={() => toggleSection('conditions')}
+            onClick={() => toggleSection("conditions")}
             className="w-full flex items-center justify-between p-6 hover:bg-[#252d3f] transition"
           >
             <h2 className="text-xl font-bold">Conditions</h2>
@@ -268,10 +276,14 @@ export default function WorkflowDetailPage() {
                     >
                       <div className="flex-1">
                         <p className="text-gray-400 text-sm">
-                          {condition.field_name}{' '}
+                          {condition.field_name}{" "}
                           <span className="text-cyan-400">
-                            {OPERATORS.find((o) => o.value === condition.operator)?.label}
-                          </span>{' '}
+                            {
+                              OPERATORS.find(
+                                (o) => o.value === condition.operator,
+                              )?.label
+                            }
+                          </span>{" "}
                           {condition.value}
                         </p>
                         {condition.logic_operator && (
@@ -290,7 +302,9 @@ export default function WorkflowDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-400 text-sm mb-4">No conditions set yet</p>
+                <p className="text-gray-400 text-sm mb-4">
+                  No conditions set yet
+                </p>
               )}
 
               {showAddCondition ? (
@@ -366,7 +380,7 @@ export default function WorkflowDetailPage() {
         {/* Actions Section */}
         <div className="bg-[#1a2332] border border-gray-700 rounded-lg overflow-hidden">
           <button
-            onClick={() => toggleSection('actions')}
+            onClick={() => toggleSection("actions")}
             className="w-full flex items-center justify-between p-6 hover:bg-[#252d3f] transition"
           >
             <h2 className="text-xl font-bold">Actions</h2>
@@ -389,13 +403,16 @@ export default function WorkflowDetailPage() {
                       <div className="flex-1">
                         <p className="text-gray-400 text-sm">
                           <span className="text-cyan-400 font-semibold">
-                            {ACTION_TYPES.find((a) => a.value === action.action_type)
-                              ?.label}
+                            {
+                              ACTION_TYPES.find(
+                                (a) => a.value === action.action_type,
+                              )?.label
+                            }
                           </span>
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Order: {action.order} · Status:{' '}
-                          {action.is_active ? 'Active' : 'Inactive'}
+                          Order: {action.order} · Status:{" "}
+                          {action.is_active ? "Active" : "Inactive"}
                         </p>
                       </div>
                       <button

@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Trash2, Plus, Edit2, CheckCircle, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Trash2, Plus, Edit2, CheckCircle, AlertCircle } from "lucide-react";
 
 interface Workflow {
   id: string;
@@ -21,33 +21,45 @@ interface NewWorkflow {
   trigger_type: string;
 }
 
-const ENTITY_TYPES = ['lead', 'client', 'deposit', 'withdrawal', 'ib_partner', 'task'];
-const TRIGGER_TYPES = ['entity_created', 'status_changed', 'time_based', 'manual'];
+const ENTITY_TYPES = [
+  "lead",
+  "client",
+  "deposit",
+  "withdrawal",
+  "ib_partner",
+  "task",
+];
+const TRIGGER_TYPES = [
+  "entity_created",
+  "status_changed",
+  "time_based",
+  "manual",
+];
 
 export default function WorkflowsPage() {
   const router = useRouter();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NewWorkflow>({
-    name: '',
-    description: '',
-    entity_type: 'lead',
-    trigger_type: 'entity_created',
+    name: "",
+    description: "",
+    entity_type: "lead",
+    trigger_type: "entity_created",
   });
 
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/v1/broker/workflows');
-      if (!response.ok) throw new Error('Failed to fetch workflows');
+      const response = await fetch("/api/v1/broker/workflows");
+      if (!response.ok) throw new Error("Failed to fetch workflows");
       const data = await response.json();
       setWorkflows(data);
-      setError('');
+      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load workflows');
+      setError(err instanceof Error ? err.message : "Failed to load workflows");
     } finally {
       setLoading(false);
     }
@@ -63,42 +75,45 @@ export default function WorkflowsPage() {
     e.preventDefault();
     try {
       if (!formData.name.trim()) {
-        setError('Workflow name is required');
+        setError("Workflow name is required");
         return;
       }
 
-      const method = editingId ? 'PUT' : 'POST';
+      const method = editingId ? "PUT" : "POST";
       const url = editingId
         ? `/api/v1/broker/workflows/${editingId}`
-        : '/api/v1/broker/workflows';
+        : "/api/v1/broker/workflows";
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error(`Failed to ${editingId ? 'update' : 'create'} workflow`);
+      if (!response.ok)
+        throw new Error(
+          `Failed to ${editingId ? "update" : "create"} workflow`,
+        );
 
       setFormData({
-        name: '',
-        description: '',
-        entity_type: 'lead',
-        trigger_type: 'entity_created',
+        name: "",
+        description: "",
+        entity_type: "lead",
+        trigger_type: "entity_created",
       });
       setEditingId(null);
       setShowForm(false);
-      setError('');
+      setError("");
       await fetchWorkflows();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save workflow');
+      setError(err instanceof Error ? err.message : "Failed to save workflow");
     }
   };
 
   const handleEdit = (workflow: Workflow) => {
     setFormData({
       name: workflow.name,
-      description: workflow.description || '',
+      description: workflow.description || "",
       entity_type: workflow.entity_type,
       trigger_type: workflow.trigger_type,
     });
@@ -107,16 +122,18 @@ export default function WorkflowsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this workflow?')) return;
+    if (!confirm("Are you sure you want to delete this workflow?")) return;
     try {
       const response = await fetch(`/api/v1/broker/workflows/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
-      if (!response.ok) throw new Error('Failed to delete workflow');
-      setError('');
+      if (!response.ok) throw new Error("Failed to delete workflow");
+      setError("");
       await fetchWorkflows();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete workflow');
+      setError(
+        err instanceof Error ? err.message : "Failed to delete workflow",
+      );
     }
   };
 
@@ -124,10 +141,10 @@ export default function WorkflowsPage() {
     setShowForm(false);
     setEditingId(null);
     setFormData({
-      name: '',
-      description: '',
-      entity_type: 'lead',
-      trigger_type: 'entity_created',
+      name: "",
+      description: "",
+      entity_type: "lead",
+      trigger_type: "entity_created",
     });
   };
 
@@ -142,7 +159,9 @@ export default function WorkflowsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold mb-2">Workflows</h1>
-            <p className="text-gray-400">Automate business processes and lead management</p>
+            <p className="text-gray-400">
+              Automate business processes and lead management
+            </p>
           </div>
           <button
             onClick={() => setShowForm(true)}
@@ -164,12 +183,14 @@ export default function WorkflowsPage() {
         {showForm && (
           <div className="bg-[#1a2332] border border-gray-700 rounded-lg p-6 mb-8">
             <h2 className="text-xl font-bold mb-4">
-              {editingId ? 'Edit Workflow' : 'Create New Workflow'}
+              {editingId ? "Edit Workflow" : "Create New Workflow"}
             </h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Name *</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Name *
+                  </label>
                   <input
                     type="text"
                     value={formData.name}
@@ -181,7 +202,9 @@ export default function WorkflowsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Entity Type *</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Entity Type *
+                  </label>
                   <select
                     value={formData.entity_type}
                     onChange={(e) =>
@@ -197,7 +220,9 @@ export default function WorkflowsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Trigger Type *</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Trigger Type *
+                  </label>
                   <select
                     value={formData.trigger_type}
                     onChange={(e) =>
@@ -208,15 +233,20 @@ export default function WorkflowsPage() {
                     {TRIGGER_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {type
-                          .split('_')
-                          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                          .join(' ')}
+                          .split("_")
+                          .map(
+                            (word) =>
+                              word.charAt(0).toUpperCase() + word.slice(1),
+                          )
+                          .join(" ")}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Description</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Description
+                  </label>
                   <input
                     type="text"
                     value={formData.description}
@@ -233,7 +263,7 @@ export default function WorkflowsPage() {
                   type="submit"
                   className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold py-2 px-6 rounded-lg transition"
                 >
-                  {editingId ? 'Update' : 'Create'}
+                  {editingId ? "Update" : "Create"}
                 </button>
                 <button
                   type="button"
@@ -268,13 +298,21 @@ export default function WorkflowsPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold">{workflow.name}</h3>
                     {workflow.description && (
-                      <p className="text-gray-400 text-sm mt-1">{workflow.description}</p>
+                      <p className="text-gray-400 text-sm mt-1">
+                        {workflow.description}
+                      </p>
                     )}
                   </div>
                   {workflow.is_active ? (
-                    <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
+                    <CheckCircle
+                      size={20}
+                      className="text-green-500 flex-shrink-0"
+                    />
                   ) : (
-                    <AlertCircle size={20} className="text-yellow-500 flex-shrink-0" />
+                    <AlertCircle
+                      size={20}
+                      className="text-yellow-500 flex-shrink-0"
+                    />
                   )}
                 </div>
 
@@ -322,7 +360,9 @@ export default function WorkflowsPage() {
         {!loading && workflows.length === 0 && (
           <div className="bg-[#1a2332] border border-dashed border-gray-600 rounded-lg p-12 text-center">
             <h3 className="text-xl font-bold mb-2">No workflows yet</h3>
-            <p className="text-gray-400 mb-6">Create your first workflow to automate business processes</p>
+            <p className="text-gray-400 mb-6">
+              Create your first workflow to automate business processes
+            </p>
             <button
               onClick={() => setShowForm(true)}
               className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold py-2 px-6 rounded-lg inline-flex items-center gap-2 transition"
