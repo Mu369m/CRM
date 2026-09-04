@@ -25,35 +25,124 @@ class EntitlementDecision:
     quota_gb: int | None = None
 
 
-_PLAN_RULES: dict[str, dict[EntitlementKind, dict[InfrastructureMode, EntitlementDecision]]] = {
+_PLAN_RULES: dict[
+    str, dict[EntitlementKind, dict[InfrastructureMode, EntitlementDecision]]
+] = {
     "STARTER": {
         EntitlementKind.DATABASE: {
-            InfrastructureMode.SAAS: EntitlementDecision("STARTER", EntitlementKind.DATABASE, InfrastructureMode.SAAS, True, True, False),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("STARTER", EntitlementKind.DATABASE, InfrastructureMode.EXTERNAL, False, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "STARTER",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "STARTER",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.EXTERNAL,
+                False,
+                False,
+                False,
+            ),
         },
         EntitlementKind.STORAGE: {
-            InfrastructureMode.SAAS: EntitlementDecision("STARTER", EntitlementKind.STORAGE, InfrastructureMode.SAAS, True, True, False, 50),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("STARTER", EntitlementKind.STORAGE, InfrastructureMode.EXTERNAL, False, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "STARTER",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+                50,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "STARTER",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.EXTERNAL,
+                False,
+                False,
+                False,
+            ),
         },
     },
     "PROFESSIONAL": {
         EntitlementKind.DATABASE: {
-            InfrastructureMode.SAAS: EntitlementDecision("PROFESSIONAL", EntitlementKind.DATABASE, InfrastructureMode.SAAS, True, True, False),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("PROFESSIONAL", EntitlementKind.DATABASE, InfrastructureMode.EXTERNAL, False, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "PROFESSIONAL",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "PROFESSIONAL",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.EXTERNAL,
+                False,
+                False,
+                False,
+            ),
         },
         EntitlementKind.STORAGE: {
-            InfrastructureMode.SAAS: EntitlementDecision("PROFESSIONAL", EntitlementKind.STORAGE, InfrastructureMode.SAAS, True, True, False, 200),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("PROFESSIONAL", EntitlementKind.STORAGE, InfrastructureMode.EXTERNAL, False, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "PROFESSIONAL",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+                200,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "PROFESSIONAL",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.EXTERNAL,
+                False,
+                False,
+                False,
+            ),
         },
     },
     "ENTERPRISE": {
         EntitlementKind.DATABASE: {
-            InfrastructureMode.SAAS: EntitlementDecision("ENTERPRISE", EntitlementKind.DATABASE, InfrastructureMode.SAAS, True, True, False),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("ENTERPRISE", EntitlementKind.DATABASE, InfrastructureMode.EXTERNAL, True, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "ENTERPRISE",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "ENTERPRISE",
+                EntitlementKind.DATABASE,
+                InfrastructureMode.EXTERNAL,
+                True,
+                False,
+                False,
+            ),
         },
         EntitlementKind.STORAGE: {
-            InfrastructureMode.SAAS: EntitlementDecision("ENTERPRISE", EntitlementKind.STORAGE, InfrastructureMode.SAAS, True, True, False, 500),
-            InfrastructureMode.EXTERNAL: EntitlementDecision("ENTERPRISE", EntitlementKind.STORAGE, InfrastructureMode.EXTERNAL, True, False, False),
+            InfrastructureMode.SAAS: EntitlementDecision(
+                "ENTERPRISE",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.SAAS,
+                True,
+                True,
+                False,
+                500,
+            ),
+            InfrastructureMode.EXTERNAL: EntitlementDecision(
+                "ENTERPRISE",
+                EntitlementKind.STORAGE,
+                InfrastructureMode.EXTERNAL,
+                True,
+                False,
+                False,
+            ),
         },
     },
 }
