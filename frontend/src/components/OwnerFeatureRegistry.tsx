@@ -26,10 +26,18 @@ interface Grant {
   ends_at: string | null;
 }
 
+interface BrokerSummary {
+  id: string;
+  name: string;
+  plan: string;
+  is_active: boolean;
+}
+
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function OwnerFeatureRegistry() {
   const [features, setFeatures] = useState<Feature[]>([]);
+  const [brokers, setBrokers] = useState<BrokerSummary[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,8 +76,25 @@ export default function OwnerFeatureRegistry() {
     }
   }
 
+  async function loadBrokers() {
+    try {
+      const response = await fetch(`${api}/api/v1/owner/features/brokers`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token") ?? ""}`,
+        },
+      });
+      if (!response.ok) throw new Error("Unable to load broker directory.");
+      setBrokers((await response.json()) as BrokerSummary[]);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to load brokers.",
+      );
+    }
+  }
+
   useEffect(() => {
     void loadFeatures();
+    void loadBrokers();
   }, []);
 
   async function createFeature(event: FormEvent) {
@@ -253,14 +278,29 @@ export default function OwnerFeatureRegistry() {
               ))}
             </select>
           </label>
-          <Input
-            label="Broker tenant ID"
-            value={grantForm.tenant_id}
-            placeholder="UUID"
-            onChange={(value) =>
-              setGrantForm({ ...grantForm, tenant_id: value })
-            }
-          />
+          <label className="block text-xs text-slate-400">
+            Broker tenant
+            <select
+              required
+              value={grantForm.tenant_id}
+              onChange={(event) =>
+                setGrantForm({ ...grantForm, tenant_id: event.target.value })
+              }
+              className="mt-2 w-full rounded border border-slate-700 bg-[#0D121F] px-3 py-2 text-sm text-white"
+            >
+              <option value="">Select broker</option>
+              {brokers.map((broker) => (
+                <option
+                  key={broker.id}
+                  value={broker.id}
+                  disabled={!broker.is_active}
+                >
+                  {broker.name} · {broker.plan} ·{" "}
+                  {broker.is_active ? "Active" : "Inactive"}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="block text-xs text-slate-400">
             Status
             <select

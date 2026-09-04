@@ -75,6 +75,13 @@ class GrantResponse(BaseModel):
     granted_by: UUID
 
 
+class BrokerSummary(BaseModel):
+    id: UUID
+    name: str
+    plan: str
+    is_active: bool
+
+
 def _validate_configuration(feature: FeatureDefinition, configuration: dict) -> None:
     schema = feature.configuration_schema or {}
     properties = schema.get("properties", {})
@@ -121,6 +128,23 @@ async def list_features(
             select(FeatureDefinition).order_by(FeatureDefinition.feature_key)
         )
     )
+
+
+@router.get("/brokers", response_model=list[BrokerSummary])
+async def list_brokers(
+    db: AsyncSession = Depends(get_db),
+    _: OwnerClaims = Depends(verified_owner_claims),
+) -> list[BrokerSummary]:
+    tenants = await db.scalars(select(Tenant).order_by(Tenant.name))
+    return [
+        BrokerSummary(
+            id=tenant.id,
+            name=tenant.name,
+            plan=tenant.plan,
+            is_active=tenant.is_active,
+        )
+        for tenant in tenants
+    ]
 
 
 @router.post("", response_model=FeatureResponse, status_code=status.HTTP_201_CREATED)
