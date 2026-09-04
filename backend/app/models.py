@@ -660,8 +660,8 @@ class IntegrationConfig(Base):
     name: Mapped[str] = mapped_column(String(120))
     provider: Mapped[IntegrationProvider] = mapped_column()
     integration_type: Mapped[str] = mapped_column(String(80), default="EXTERNAL")
-    status: Mapped[IntegrationStatus] = mapped_column(
-        default=IntegrationStatus.NOT_CONFIGURED
+    status: Mapped[str] = mapped_column(
+        String(40), default=IntegrationStatus.NOT_CONFIGURED.value
     )
     enabled: Mapped[bool] = mapped_column(default=False)
     is_saas_managed: Mapped[bool] = mapped_column(default=False)
@@ -676,6 +676,40 @@ class IntegrationConfig(Base):
     )
     last_connected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class InfrastructureConfig(Base):
+    __tablename__ = "infrastructure_configs"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "kind", name="uq_infrastructure_tenant_kind"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20))
+    mode: Mapped[str] = mapped_column(String(20), default="SAAS")
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    engine: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[IntegrationStatus] = mapped_column(
+        default=IntegrationStatus.NOT_CONFIGURED
+    )
+    active: Mapped[bool] = mapped_column(default=False)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
