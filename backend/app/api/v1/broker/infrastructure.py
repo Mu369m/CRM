@@ -10,10 +10,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.db_router import get_tenant_db
+from ....core.entitlements import (
+    EntitlementKind,
+    get_infrastructure_entitlement,
+)
 from ....core.provider_connectors import test_provider_connection
 from ....crypto import decrypt_field, encrypt_field
 from ....middleware.audit_logger import AuditLogger
-from ....models import InfrastructureConfig, IntegrationStatus, Role
+from ....models import InfrastructureConfig, IntegrationStatus, Role, Tenant
 from ....security import require_roles
 
 router = APIRouter(prefix="/api/v1/broker/infrastructure", tags=["Infrastructure"])
@@ -143,6 +147,15 @@ async def configure_infrastructure(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> InfrastructureResponse:
     tenant_id, actor_id = UUID(claims["tenant_id"]), UUID(claims["sub"])
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    entitlement = get_infrastructure_entitlement(tenant.plan, kind, payload.mode)
+    if not entitlement.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{payload.mode} {kind.lower()} is not allowed on the current plan",
+        )
     if payload.mode == "SAAS":
         if payload.credentials:
             raise HTTPException(
@@ -242,6 +255,9 @@ async def activate_infrastructure(
     confirm: bool = False,
 ) -> InfrastructureResponse:
     tenant_id, actor_id = UUID(claims["tenant_id"]), UUID(claims["sub"])
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     row = await db.scalar(
         select(InfrastructureConfig)
         .where(
@@ -253,6 +269,12 @@ async def activate_infrastructure(
     if not row:
         raise HTTPException(
             status_code=404, detail="Infrastructure configuration not found"
+        )
+    entitlement = get_infrastructure_entitlement(tenant.plan, kind, row.mode)
+    if not entitlement.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{row.mode} {kind.lower()} is not allowed on the current plan",
         )
     if (
         row.status != IntegrationStatus.CONNECTED.value
