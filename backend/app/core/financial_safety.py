@@ -18,7 +18,7 @@ Never lose transaction history.
 
 from decimal import Decimal
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from sqlalchemy import select, text, func, and_
@@ -39,12 +39,12 @@ from app.models import (
 
 class FinancialErrorType(StrEnum):
     """Classification of financial operation errors."""
-    
+
     # Retryable errors (can safely retry)
     TEMPORARY_DB_FAILURE = "TEMPORARY_DB_FAILURE"
     PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
     PROVIDER_RATE_LIMIT = "PROVIDER_RATE_LIMIT"
-    
+
     # Non-retryable errors (should not retry)
     INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
     DUPLICATE_REQUEST = "DUPLICATE_REQUEST"
@@ -55,12 +55,12 @@ class FinancialErrorType(StrEnum):
     AMOUNT_OUT_OF_RANGE = "AMOUNT_OUT_OF_RANGE"
     INVALID_CURRENCY = "INVALID_CURRENCY"
     INVALID_PAYMENT_METHOD = "INVALID_PAYMENT_METHOD"
-    
+
     # Provider errors
     PROVIDER_ERROR = "PROVIDER_ERROR"
     PROVIDER_INVALID_RESPONSE = "PROVIDER_INVALID_RESPONSE"
     PROVIDER_AUTHENTICATION_FAILED = "PROVIDER_AUTHENTICATION_FAILED"
-    
+
     # System errors
     SYSTEM_MAINTENANCE = "SYSTEM_MAINTENANCE"
     DATABASE_ERROR = "DATABASE_ERROR"
@@ -68,7 +68,7 @@ class FinancialErrorType(StrEnum):
 
 class FinancialOperationResult:
     """Result of a financial operation."""
-    
+
     def __init__(
         self,
         success: bool,
@@ -95,7 +95,7 @@ async def get_wallet_balance_from_ledger(
 ) -> Decimal:
     """
     Derive wallet balance from ledger entries (source of truth).
-    
+
     PRODUCTION RULE: Wallet balance is CALCULATED, not stored.
     This ensures ledger is always authoritative.
     """
@@ -103,7 +103,7 @@ async def get_wallet_balance_from_ledger(
         select(func.sum(LedgerEntry.amount)).where(
             and_(
                 LedgerEntry.wallet_id == wallet_id,
-                # Verify tenant isolation
+                LedgerEntry.wallet.has(Wallet.tenant_id == tenant_id),
             )
         )
     )
@@ -112,22 +112,22 @@ async def get_wallet_balance_from_ledger(
 
 
 async def lock_wallet_for_withdrawal(
-    db: AsyncSession, wallet_id: UUID
+    db: AsyncSession, wallet_id: UUID, tenant_id: UUID
 ) -> Wallet | None:
     """
     Acquire PESSIMISTIC_WRITE lock on wallet to prevent concurrent withdrawals.
-    
+
     This ensures:
     - Only one withdrawal processes at a time per wallet
     - Balance calculations are consistent
     - No double-spending possible
-    
+
     PRODUCTION RULE: Use database-level locking, never application-level.
     """
     # Use FOR UPDATE (pessimistic write lock)
     stmt = (
         select(Wallet)
-        .where(Wallet.id == wallet_id)
+        .where(Wallet.id == wallet_id, Wallet.tenant_id == tenant_id)
         .with_for_update(nowait=False, read=False)
     )
     result = await db.execute(stmt)
@@ -142,7 +142,7 @@ async def check_duplicate_transaction(
 ) -> Transaction | None:
     """
     Check if transaction with this idempotency key already exists.
-    
+
     PRODUCTION RULE: Use idempotency keys to prevent duplicate processing.
     If request arrives twice, return the same result.
     """
@@ -166,7 +166,7 @@ async def create_ledger_entry(
 ) -> LedgerEntry:
     """
     Create immutable ledger entry.
-    
+
     PRODUCTION RULE: Ledger entries are IMMUTABLE.
     Corrections use separate ADJUSTMENT entries, not overwrites.
     """
@@ -194,7 +194,7 @@ async def process_withdrawal_atomically(
 ) -> FinancialOperationResult:
     """
     Process withdrawal with guaranteed atomicity.
-    
+
     Flow:
     1. Check duplicate via idempotency key
     2. Lock wallet (pessimistic write)
@@ -203,16 +203,27 @@ async def process_withdrawal_atomically(
     5. Create ledger entry
     6. Create transaction record
     7. Return result
-    
+
     If ANY step fails:
     - Rollback entire transaction
     - Mark status as PENDING (retry later)
     - Log error with classification
-    
+
     PRODUCTION RULE: VALIDATE → RECORD → CLASSIFY ERROR → RETRY IF SAFE
     """
-    
+
     try:
+        owner = await db.scalar(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+        if not owner:
+            return FinancialOperationResult(
+                success=False,
+                error_type=FinancialErrorType.CLIENT_NOT_FOUND,
+                error_message="Client not found in this tenant",
+                is_retryable=False,
+            )
+
         # Step 1: Check for duplicate
         existing = await check_duplicate_transaction(
             db, tenant_id, idempotency_key, "WITHDRAWAL"
@@ -228,9 +239,9 @@ async def process_withdrawal_atomically(
                 original_balance=balance,
                 new_balance=balance,  # Balance unchanged for duplicate
             )
-        
+
         # Step 2: Lock wallet for exclusive access
-        wallet = await lock_wallet_for_withdrawal(db, wallet_id)
+        wallet = await lock_wallet_for_withdrawal(db, wallet_id, tenant_id)
         if not wallet:
             return FinancialOperationResult(
                 success=False,
@@ -238,12 +249,12 @@ async def process_withdrawal_atomically(
                 error_message="Wallet not found",
                 is_retryable=False,
             )
-        
+
         # Step 3: Get current balance from ledger
         original_balance = await get_wallet_balance_from_ledger(
             db, wallet_id, tenant_id
         )
-        
+
         # Step 4: Validate sufficient balance
         if original_balance < amount:
             return FinancialOperationResult(
@@ -254,7 +265,7 @@ async def process_withdrawal_atomically(
                 original_balance=original_balance,
                 new_balance=original_balance,
             )
-        
+
         # Step 5: Create ledger entry (WITHDRAWAL is negative)
         reference = f"WD-{idempotency_key}"
         ledger_entry = await create_ledger_entry(
@@ -265,7 +276,7 @@ async def process_withdrawal_atomically(
             reference=reference,
             note=f"Withdrawal via {method_id}",
         )
-        
+
         # Step 6: Create transaction record
         transaction = Transaction(
             tenant_id=tenant_id,
@@ -279,12 +290,10 @@ async def process_withdrawal_atomically(
         )
         db.add(transaction)
         await db.flush()
-        
+
         # Step 7: Calculate new balance
-        new_balance = await get_wallet_balance_from_ledger(
-            db, wallet_id, tenant_id
-        )
-        
+        new_balance = await get_wallet_balance_from_ledger(db, wallet_id, tenant_id)
+
         # Step 8: Create audit log
         await create_financial_audit_log(
             db,
@@ -300,10 +309,10 @@ async def process_withdrawal_atomically(
                 "ledger_entry_id": str(ledger_entry.id),
             },
         )
-        
+
         # Commit transaction
         await db.commit()
-        
+
         return FinancialOperationResult(
             success=True,
             transaction_id=transaction.id,
@@ -311,18 +320,18 @@ async def process_withdrawal_atomically(
             original_balance=original_balance,
             new_balance=new_balance,
         )
-        
+
     except Exception as e:
         # Rollback on any error
         await db.rollback()
-        
+
         # Classify error
         error_type = classify_database_error(str(e))
         is_retryable = error_type in [
             FinancialErrorType.TEMPORARY_DB_FAILURE,
             FinancialErrorType.PROVIDER_TIMEOUT,
         ]
-        
+
         return FinancialOperationResult(
             success=False,
             error_type=error_type,
@@ -344,11 +353,22 @@ async def process_deposit_atomically(
 ) -> FinancialOperationResult:
     """
     Process deposit with guaranteed atomicity and idempotency.
-    
+
     Uses provider_transaction_id to detect duplicate webhooks.
     """
-    
+
     try:
+        owner = await db.scalar(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+        if not owner:
+            return FinancialOperationResult(
+                success=False,
+                error_type=FinancialErrorType.CLIENT_NOT_FOUND,
+                error_message="Client not found in this tenant",
+                is_retryable=False,
+            )
+
         # Check for duplicate by provider transaction ID
         existing_webhook = await db.execute(
             select(WebhookEvent).where(
@@ -359,7 +379,7 @@ async def process_deposit_atomically(
             )
         )
         webhook = existing_webhook.scalar_one_or_none()
-        
+
         if webhook and webhook.processed_at:
             # Already processed this webhook
             balance = await get_wallet_balance_from_ledger(db, wallet_id, tenant_id)
@@ -371,9 +391,9 @@ async def process_deposit_atomically(
                 original_balance=balance,
                 new_balance=balance,
             )
-        
+
         # Lock wallet
-        wallet = await lock_wallet_for_withdrawal(db, wallet_id)
+        wallet = await lock_wallet_for_withdrawal(db, wallet_id, tenant_id)
         if not wallet:
             return FinancialOperationResult(
                 success=False,
@@ -381,12 +401,12 @@ async def process_deposit_atomically(
                 error_message="Wallet not found",
                 is_retryable=False,
             )
-        
+
         # Get current balance
         original_balance = await get_wallet_balance_from_ledger(
             db, wallet_id, tenant_id
         )
-        
+
         # Create ledger entry
         reference = f"DEP-{idempotency_key}"
         ledger_entry = await create_ledger_entry(
@@ -397,7 +417,7 @@ async def process_deposit_atomically(
             reference=reference,
             note=f"Deposit from {provider} {provider_transaction_id}",
         )
-        
+
         # Create transaction record
         transaction = Transaction(
             tenant_id=tenant_id,
@@ -410,16 +430,14 @@ async def process_deposit_atomically(
         )
         db.add(transaction)
         await db.flush()
-        
+
         # Mark webhook as processed
         if webhook:
-            webhook.processed_at = datetime.utcnow()
-        
+            webhook.processed_at = datetime.now(timezone.utc)
+
         # Calculate new balance
-        new_balance = await get_wallet_balance_from_ledger(
-            db, wallet_id, tenant_id
-        )
-        
+        new_balance = await get_wallet_balance_from_ledger(db, wallet_id, tenant_id)
+
         # Audit log
         await create_financial_audit_log(
             db,
@@ -436,9 +454,9 @@ async def process_deposit_atomically(
                 "transaction_id": str(transaction.id),
             },
         )
-        
+
         await db.commit()
-        
+
         return FinancialOperationResult(
             success=True,
             transaction_id=transaction.id,
@@ -446,7 +464,7 @@ async def process_deposit_atomically(
             original_balance=original_balance,
             new_balance=new_balance,
         )
-        
+
     except Exception as e:
         await db.rollback()
         error_type = classify_database_error(str(e))
@@ -454,7 +472,8 @@ async def process_deposit_atomically(
             success=False,
             error_type=error_type,
             error_message=f"Deposit failed: {str(e)}",
-            is_retryable=error_type in [
+            is_retryable=error_type
+            in [
                 FinancialErrorType.TEMPORARY_DB_FAILURE,
             ],
         )
@@ -469,12 +488,12 @@ async def create_financial_audit_log(
 ) -> AuditLog:
     """
     Create audit log for financial operation.
-    
+
     PRODUCTION RULE: All financial operations must be audited.
     Audit logs are IMMUTABLE and NON-DELETABLE.
     """
     import json
-    
+
     log = AuditLog(
         tenant_id=tenant_id,
         actor_id=actor_id,
@@ -489,21 +508,21 @@ async def create_financial_audit_log(
 def classify_database_error(error_message: str) -> FinancialErrorType:
     """Classify database errors as retryable or not."""
     error_lower = error_message.lower()
-    
+
     # Temporary failures
     if any(x in error_lower for x in ["connection", "timeout", "pool"]):
         return FinancialErrorType.TEMPORARY_DB_FAILURE
-    
+
     if "rate limit" in error_lower:
         return FinancialErrorType.PROVIDER_RATE_LIMIT
-    
+
     # Non-retryable failures
     if "unique constraint" in error_lower or "duplicate" in error_lower:
         return FinancialErrorType.DUPLICATE_REQUEST
-    
+
     if "not found" in error_lower:
         return FinancialErrorType.WALLET_NOT_FOUND
-    
+
     # Default
     return FinancialErrorType.DATABASE_ERROR
 

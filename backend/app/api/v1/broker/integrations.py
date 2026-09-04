@@ -36,6 +36,7 @@ from ....admin_schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/broker/integrations", tags=["Broker Integrations"])
+INTEGRATION_NOT_FOUND = "Integration not found"
 
 
 def _masked_credentials_payload(
@@ -119,7 +120,8 @@ async def create_integration(
         name=payload.name,
         provider=provider,
         integration_type=payload.integration_type,
-        enabled=payload.enabled,
+        # New credentials must be tested before production activation.
+        enabled=False,
         status=IntegrationStatus.NOT_CONFIGURED,
         config_json=payload.config_json or {},
         encrypted_credentials=encrypt_field(json.dumps(payload.credentials or {}))
@@ -175,7 +177,7 @@ async def get_integration(
     integration = await db.get(IntegrationConfig, integration_id)
     if not integration or integration.tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
 
     masked = None
@@ -225,7 +227,7 @@ async def replace_integration_credentials(
     )
     if not integration:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
     candidate = encrypt_field(json.dumps(payload.credentials))
     result = await test_provider_connection(
@@ -269,7 +271,7 @@ async def test_integration_connection(
     integration = await db.get(IntegrationConfig, integration_id)
     if not integration or integration.tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
 
     if not integration.encrypted_credentials:
@@ -349,7 +351,7 @@ async def enable_integration(
     integration = await db.get(IntegrationConfig, integration_id)
     if not integration or integration.tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
 
     integration.enabled = enabled
@@ -392,7 +394,7 @@ async def delete_integration(
     integration = await db.get(IntegrationConfig, integration_id)
     if not integration or integration.tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
     await AuditLogger.log_delete(
         db, tenant_id, UUID(claims["sub"]), "INTEGRATION", integration.id
@@ -502,7 +504,7 @@ async def check_integration_scope(
     integration = await db.get(IntegrationConfig, integration_id)
     if not integration or integration.tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=INTEGRATION_NOT_FOUND
         )
     return {
         "broker_id_matches": integration_scope_ok(broker_id, integration.tenant_id),

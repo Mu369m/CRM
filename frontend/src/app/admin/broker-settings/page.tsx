@@ -1,13 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, Plus, Trash2, Edit2, Settings, Users, Zap, Palette, Database } from "lucide-react";
+import { Plus, Trash2, Edit2, Settings, Users, Zap, Palette, Database } from "lucide-react";
 import MainLayout from "@/components/navigation/MainLayout";
 
 interface TabConfig {
   id: string;
   label: string;
   icon: typeof Settings;
+}
+
+interface BrokerRole {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 const tabs: TabConfig[] = [
@@ -20,7 +26,6 @@ const tabs: TabConfig[] = [
 
 export default function BrokerAdminPage() {
   const [activeTab, setActiveTab] = useState("general");
-  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   return (
@@ -165,7 +170,7 @@ function GeneralSettingsTab({ onMessage }: { onMessage: (msg: string) => void })
 }
 
 function RolesTab({ onMessage }: { onMessage: (msg: string) => void }) {
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<BrokerRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [newRoleName, setNewRoleName] = useState("");
 

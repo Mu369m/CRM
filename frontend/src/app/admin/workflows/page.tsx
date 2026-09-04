@@ -38,11 +38,6 @@ export default function WorkflowsPage() {
     trigger_type: 'entity_created',
   });
 
-  // Fetch workflows
-  useEffect(() => {
-    fetchWorkflows();
-  }, []);
-
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
@@ -57,6 +52,12 @@ export default function WorkflowsPage() {
       setLoading(false);
     }
   };
+
+  // Fetch workflows
+  useEffect(() => {
+    const timer = window.setTimeout(() => void fetchWorkflows(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

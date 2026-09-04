@@ -64,9 +64,12 @@ export default function RiskDashboard() {
   }
 
   useEffect(() => {
-    void loadRisk();
+    const initialLoad = window.setTimeout(() => void loadRisk(), 0);
     const timer = window.setInterval(() => void loadRisk(), 10_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(timer);
+    };
   }, []);
 
   async function forceClose(position: Position) {

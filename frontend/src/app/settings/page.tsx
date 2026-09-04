@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useTenant } from "@/context/TenantContext";
 
 type Tab = "branding" | "ib" | "mt";
@@ -29,7 +30,11 @@ export default function AdminSettingsPage() {
   const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const token = typeof window === "undefined" ? "" : window.localStorage.getItem("access_token") ?? "";
 
-  useEffect(() => { if (branding) setSettings((current) => ({ ...current, meta_title: branding.companyName || current.meta_title, primary_color: branding.primaryColor, secondary_color: branding.secondaryColor, logo_url: branding.logoUrl ?? "" })); }, [branding]);
+  useEffect(() => {
+    if (!branding) return;
+    const timer = window.setTimeout(() => setSettings((current) => ({ ...current, meta_title: branding.companyName || current.meta_title, primary_color: branding.primaryColor, secondary_color: branding.secondaryColor, logo_url: branding.logoUrl ?? "" })), 0);
+    return () => window.clearTimeout(timer);
+  }, [branding]);
 
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setMessage("");
@@ -47,5 +52,5 @@ export default function AdminSettingsPage() {
   {activeTab === "branding" && <section className="settings-card"><p className="eyebrow">Tenant skinning</p><h2>Brand identity & color tokens</h2><label>Company / broker name<input value={settings.meta_title} onChange={(event) => setSettings({ ...settings, meta_title: event.target.value })} required /></label><label>Support email<input type="email" value={settings.support_email} onChange={(event) => setSettings({ ...settings, support_email: event.target.value })} /></label><div className="color-fields"><label>Primary color<input type="color" value={settings.primary_color} onChange={(event) => setSettings({ ...settings, primary_color: event.target.value })} /></label><label>Secondary color<input type="color" value={settings.secondary_color} onChange={(event) => setSettings({ ...settings, secondary_color: event.target.value })} /></label></div><label>Logo image URL<input type="url" value={settings.logo_url} onChange={(event) => setSettings({ ...settings, logo_url: event.target.value })} placeholder="https://broker.example/logo.png" /></label></section>}
   {activeTab === "ib" && <section className="settings-card"><p className="eyebrow">Revenue engine</p><h2>Configure commission hierarchy</h2><label>Instrument group<input value={ib.instrument_group} onChange={(event) => setIb({ ...ib, instrument_group: event.target.value })} required /></label><label>Payout model<select value={ib.strategy} onChange={(event) => setIb({ ...ib, strategy: event.target.value })}><option value="PER_LOT_FIXED">Fixed amount per lot</option><option value="PERCENTAGE_SPREAD">Percentage of spread</option><option value="ASSET_BASED">Asset based</option></select></label><div className="ib-row"><label>Tier<input type="number" min="1" max={settings.max_ib_levels} value={ib.level} onChange={(event) => setIb({ ...ib, level: Number(event.target.value) })} /></label><label>Fixed / lot<input type="number" min="0" step="0.01" value={ib.fixed_per_lot} onChange={(event) => setIb({ ...ib, fixed_per_lot: event.target.value })} /></label><label>Spread %<input type="number" min="0" max="100" step="0.01" value={ib.spread_percentage} onChange={(event) => setIb({ ...ib, spread_percentage: event.target.value })} /></label></div><div className="rule-callout">Up to {settings.max_ib_levels} levels · tenant scoped · journaled on payout</div></section>}
   {activeTab === "mt" && <section className="settings-card"><p className="eyebrow">Platform manager</p><h2>Link trading server</h2><label>Server display name<input value={mt.name} onChange={(event) => setMt({ ...mt, name: event.target.value })} required /></label><div className="ib-row"><label>Platform<select value={mt.platform} onChange={(event) => setMt({ ...mt, platform: event.target.value })}><option>MT5</option><option>MT4</option><option>CTRADER</option></select></label><label>Manager host:port<input value={mt.server} onChange={(event) => setMt({ ...mt, server: event.target.value })} placeholder="manager.example.com:443" required /></label></div><div className="ib-row"><label>Manager login<input value={mt.login} onChange={(event) => setMt({ ...mt, login: event.target.value })} required /></label><label>Username (optional)<input value={mt.username} onChange={(event) => setMt({ ...mt, username: event.target.value })} /></label></div><label>Manager password<input type="password" value={mt.password} onChange={(event) => setMt({ ...mt, password: event.target.value })} required /><small className="field-help">Encrypted with AES-256-GCM before storage. Credentials are never returned by the API.</small></label></section>}
-  <div className="settings-actions"><a className="cancel-link" href="/">Back to overview</a><button className="save-button" disabled={saving} type="submit">{saving ? "Saving..." : activeTab === "mt" ? "Encrypt & connect" : "Apply configuration"}</button></div></form></main>;
+  <div className="settings-actions"><Link className="cancel-link" href="/">Back to overview</Link><button className="save-button" disabled={saving} type="submit">{saving ? "Saving..." : activeTab === "mt" ? "Encrypt & connect" : "Apply configuration"}</button></div></form></main>;
 }

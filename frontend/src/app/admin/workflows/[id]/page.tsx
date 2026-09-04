@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -11,7 +11,7 @@ interface WorkflowDetail {
   entity_type: string;
   is_active: boolean;
   trigger_type: string;
-  trigger_config: Record<string, any>;
+  trigger_config: Record<string, unknown>;
   actions: WorkflowAction[];
   conditions: WorkflowCondition[];
   created_at: string;
@@ -20,7 +20,7 @@ interface WorkflowDetail {
 interface WorkflowAction {
   id: string;
   action_type: string;
-  action_config: Record<string, any>;
+  action_config: Record<string, unknown>;
   order: number;
   is_active: boolean;
 }
@@ -75,11 +75,7 @@ export default function WorkflowDetailPage() {
     logic_operator: 'AND',
   });
 
-  useEffect(() => {
-    fetchWorkflow();
-  }, [workflowId]);
-
-  const fetchWorkflow = async () => {
+  const fetchWorkflow = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/v1/broker/workflows/${workflowId}`);
@@ -92,7 +88,12 @@ export default function WorkflowDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workflowId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void fetchWorkflow(), 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchWorkflow]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({

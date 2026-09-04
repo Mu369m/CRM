@@ -223,17 +223,24 @@ async def create_field_definition(
             status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
         )
 
-    # Verify unique key per tenant
+    # Reuse a disabled definition so toggling a field does not lose its values.
     result = await db.execute(
         select(CustomFieldDefinition).where(
             (CustomFieldDefinition.tenant_id == tenant_id)
             & (CustomFieldDefinition.key == payload.key)
         )
     )
-    if result.scalar():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Field key already exists"
-        )
+    existing_field = result.scalar()
+    if existing_field:
+        if existing_field.group_id != group_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Field key already exists in another group",
+            )
+        existing_field.is_active = True
+        await db.commit()
+        await db.refresh(existing_field)
+        return existing_field
 
     field = CustomFieldDefinition(
         tenant_id=tenant_id,
@@ -367,9 +374,15 @@ async def set_field_value(
 
     # Check if value already exists
     result = await db.execute(
-        select(CustomFieldValue).where(
+        select(CustomFieldValue)
+        .join(
+            CustomFieldDefinition,
+            CustomFieldDefinition.id == CustomFieldValue.field_id,
+        )
+        .where(
             (CustomFieldValue.field_id == field_id)
             & (CustomFieldValue.entity_id == payload.entity_id)
+            & (CustomFieldDefinition.tenant_id == tenant_id)
         )
     )
     value_obj = result.scalar()
@@ -397,7 +410,17 @@ async def get_entity_field_values(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     """Get custom field values for an entity."""
-    query = select(CustomFieldValue).where(CustomFieldValue.entity_id == entity_id)
+    query = (
+        select(CustomFieldValue)
+        .join(
+            CustomFieldDefinition,
+            CustomFieldDefinition.id == CustomFieldValue.field_id,
+        )
+        .where(
+            (CustomFieldValue.entity_id == entity_id)
+            & (CustomFieldDefinition.tenant_id == UUID(claims["tenant_id"]))
+        )
+    )
 
     if field_ids:
         query = query.where(CustomFieldValue.field_id.in_(field_ids))

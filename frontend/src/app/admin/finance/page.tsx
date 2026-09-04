@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Eye, RefreshCw, Search, X } from "lucide-react";
 
 type TransactionType = "DEPOSIT" | "WITHDRAWAL" | "INTERNAL_TRANSFER";
@@ -31,7 +31,7 @@ export default function FinancePage() {
   const [message, setMessage] = useState("Loading approval queue...");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function loadQueue() {
+  const loadQueue = useCallback(async () => {
     setMessage("Loading approval queue...");
     const params = new URLSearchParams({ limit: "50" });
     if (statusFilter !== "ALL") params.set("status", statusFilter);
@@ -43,9 +43,12 @@ export default function FinancePage() {
       setTransactions(data.items);
       setMessage(`${data.total} transaction${data.total === 1 ? "" : "s"} found`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load transactions."); }
-  }
+  }, [statusFilter, typeFilter]);
 
-  useEffect(() => { void loadQueue(); }, [statusFilter, typeFilter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadQueue(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadQueue]);
 
   async function approve(transaction: Transaction) {
     setBusyId(transaction.id);
